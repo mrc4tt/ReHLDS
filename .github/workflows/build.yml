@@ -2,21 +2,193 @@ name: C/C++ CI
 
 on:
   push:
-    branches: [master]
+    branches: [ master ]
     paths-ignore:
       - '**.md'
       - '.github/**'
-
   pull_request:
-    types: [opened, reopened, synchronize]
+    types: [ opened, reopened, synchronize ]
   release:
-    types: [published]
+    types: [ published ]
   workflow_dispatch:
 
+# required for publishing releases and uploading artifacts
+permissions:
+  contents: write
+
 jobs:
+  windows:
+    name: Windows
+    runs-on: windows-2025
+
+    env:
+      solution: 'msvc/ReHLDS.sln'
+      buildPlatform: 'Win32'
+      buildRelease: 'Release'
+      buildReleasePlay: 'Release Play'
+      buildTest: 'Test Fixes'
+
+    steps:
+      - name: Configure
+        shell: pwsh
+        run: git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      # TODO: add support for 141_xp toolchain at VS2022+
+      # - name: Install v140, v141 and v142 toolsets
+      #   shell: cmd
+      #   run: |
+      #     "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vs_installer.exe" modify ^
+      #     --installPath "C:\Program Files\Microsoft Visual Studio\2022\Enterprise" ^
+      #     --add Microsoft.VisualStudio.Component.WindowsXP ^
+      #     --add Microsoft.VisualStudio.Component.VC.v140 ^
+      #     --add Microsoft.VisualStudio.Component.VC.v140.x86.x64 ^
+      #     --add Microsoft.VisualStudio.Component.VC.v140.xp ^
+      #     --add Microsoft.VisualStudio.Component.VC.140.CRT ^
+      #     --add Microsoft.VisualStudio.Component.VC.v141 ^
+      #     --add Microsoft.VisualStudio.Component.VC.v141.x86.x64 ^
+      #     --add Microsoft.VisualStudio.Component.VC.v141.xp ^
+      #     --add Microsoft.VisualStudio.Component.VC.v142 ^
+      #     --add Microsoft.VisualStudio.Component.VC.v142.x86.x64 ^
+      #     --quiet --norestart
+
+      - name: Select PlatformToolset
+        id: select_toolset
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs2019 = & $vswhere -products * -version "[16.0,17.0)" -property installationPath -latest
+          $vs2022 = & $vswhere -products * -version "[17.0,)" -property installationPath -latest
+
+          if ($vs2019) {
+            "toolset=v140_xp" >> $env:GITHUB_OUTPUT
+            Write-Host "Selected v140_xp toolset"
+          } elseif ($vs2022) {
+            "toolset=v143" >> $env:GITHUB_OUTPUT
+            Write-Host "Selected v143 toolset"
+          } else {
+            Write-Error "No suitable Visual Studio installation found"
+            exit 1
+          }
+
+      - name: Build and Run unittests
+        shell: pwsh
+        run: |
+          $toolset = '${{ steps.select_toolset.outputs.toolset }}'
+          msbuild '${{ env.solution }}' -p:Configuration='${{ env.buildTest }}' /t:Clean,Build /p:Platform='${{ env.buildPlatform }}' /p:PlatformToolset=$toolset /p:XPDeprecationWarning=false
+          .\ "msvc\Test Fixes\swds.exe"
+          if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 3) { exit 1 }
+
+      - name: Build
+        shell: pwsh
+        run: |
+          $toolset = '${{ steps.select_toolset.outputs.toolset }}'
+          msbuild '${{ env.solution }}' -p:Configuration='${{ env.buildRelease }}' /t:Clean,Build /p:Platform='${{ env.buildPlatform }}' /p:PlatformToolset=$toolset /p:XPDeprecationWarning=false
+          msbuild '${{ env.solution }}' -p:Configuration='${{ env.buildReleasePlay }}' /t:Clean,Build /p:Platform='${{ env.buildPlatform }}' /p:PlatformToolset=$toolset /p:XPDeprecationWarning=false
+
+      - name: Get rcedit from chocolatey
+        shell: pwsh
+        run: choco install rcedit -y
+
+      - name: Move files
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path publish, publish\debug, publish\tests, publish\bin\win32\valve\dlls | Out-Null
+          Move-Item "msvc\${{ env.buildReleasePlay }}\swds.dll" publish\tests\swds.dll
+
+          Move-Item "msvc\${{ env.buildRelease }}\hlds.exe" publish\bin\win32\hlds.exe
+          Move-Item "msvc\${{ env.buildRelease }}\hltv.exe" publish\bin\win32\hltv.exe
+          Move-Item "msvc\${{ env.buildRelease }}\swds.dll" publish\bin\win32\swds.dll
+          Move-Item "msvc\${{ env.buildRelease }}\core.dll" publish\bin\win32\core.dll
+          Move-Item "msvc\${{ env.buildRelease }}\proxy.dll" publish\bin\win32\proxy.dll
+          Move-Item "msvc\${{ env.buildRelease }}\demoplayer.dll" publish\bin\win32\demoplayer.dll
+          Move-Item "msvc\${{ env.buildRelease }}\filesystem_stdio.dll" publish\bin\win32\filesystem_stdio.dll
+          Move-Item "msvc\${{ env.buildRelease }}\director.dll" publish\bin\win32\valve\dlls\director.dll
+
+          Move-Item "msvc\${{ env.buildRelease }}\hlds.pdb" publish\debug\hlds.pdb
+          Move-Item "msvc\${{ env.buildRelease }}\hltv.pdb" publish\debug\hltv.pdb
+          Move-Item "msvc\${{ env.buildRelease }}\swds.pdb" publish\debug\swds.pdb
+          Move-Item "msvc\${{ env.buildRelease }}\core.pdb" publish\debug\core.pdb
+          Move-Item "msvc\${{ env.buildRelease }}\proxy.pdb" publish\debug\proxy.pdb
+          Move-Item "msvc\${{ env.buildRelease }}\demoplayer.pdb" publish\debug\demoplayer.pdb
+          Move-Item "msvc\${{ env.buildRelease }}\filesystem_stdio.pdb" publish\debug\filesystem_stdio.pdb
+          Move-Item "msvc\${{ env.buildRelease }}\director.pdb" publish\debug\director.pdb
+
+      - name: Get app version
+        id: get_version
+        shell: pwsh
+        run: |
+          $versionFile = "rehlds/version/appversion.h"
+          if (-not (Test-Path $versionFile)) {
+            Write-Error "Version file not found: $versionFile"
+            exit 1
+          }
+          foreach ($line in Get-Content $versionFile) {
+            if ($line -match '^\s*#define\s+APP_VERSION\s+"([^"]+)"') {
+              "version=$($matches[1])" >> $env:GITHUB_OUTPUT
+              Write-Host "Found version: $($matches[1])"
+              exit 0
+            }
+          }
+          Write-Error "APP_VERSION not found in file"
+          exit 1
+
+      - name: Show version
+        shell: pwsh
+        run: echo "Version is ${{ steps.get_version.outputs.version }}"
+
+      - name: Edit resources at windows binaries
+        shell: pwsh
+        run: |
+          rcedit "${{ github.workspace }}\publish\bin\win32\hlds.exe" --set-version-string ProductName "ReHLDS" --set-file-version "${{ steps.get_version.outputs.version }}" --set-product-version "${{ steps.get_version.outputs.version }}" --set-version-string FileDescription "The Half-Life Dedicated Server, Commit: $env:GITHUB_SHA" --set-version-string "Comments" "Commit: $env:GITHUB_SHA" --set-version-string CompanyName "ReHLDS Dev Team" --set-version-string LegalCopyright "Copyright 2025 Valve, ReHLDS DevTeam"
+          rcedit "${{ github.workspace }}\publish\bin\win32\hltv.exe" --set-version-string ProductName "ReHLTV" --set-file-version "${{ steps.get_version.outputs.version }}" --set-product-version "${{ steps.get_version.outputs.version }}" --set-version-string FileDescription "The Half-Life TV, Commit: $env:GITHUB_SHA" --set-version-string "Comments" "Commit: $env:GITHUB_SHA" --set-version-string CompanyName "ReHLDS Dev Team" --set-version-string LegalCopyright "Copyright 2025 Valve, ReHLDS DevTeam"
+          rcedit "${{ github.workspace }}\publish\tests\swds.dll" --set-version-string ProductName "swds.dll" --set-file-version "${{ steps.get_version.outputs.version }}" --set-product-version "${{ steps.get_version.outputs.version }}" --set-version-string FileDescription "A dll used by Steamworks Dedicated Servers, Commit: $env:GITHUB_SHA" --set-version-string "Comments" "Commit: $env:GITHUB_SHA" --set-version-string CompanyName "ReHLDS Dev Team" --set-version-string LegalCopyright "Copyright 2025 Valve, ReHLDS DevTeam" --set-icon rehlds/dedicated/msvc/icon.ico
+          rcedit "${{ github.workspace }}\publish\bin\win32\swds.dll" --set-version-string ProductName "swds.dll" --set-file-version "${{ steps.get_version.outputs.version }}" --set-product-version "${{ steps.get_version.outputs.version }}" --set-version-string FileDescription "A dll used by Steamworks Dedicated Servers, Commit: $env:GITHUB_SHA" --set-version-string "Comments" "Commit: $env:GITHUB_SHA" --set-version-string CompanyName "ReHLDS Dev Team" --set-version-string LegalCopyright "Copyright 2025 Valve, ReHLDS DevTeam" --set-icon rehlds/dedicated/msvc/icon.ico
+          rcedit "${{ github.workspace }}\publish\bin\win32\core.dll" --set-version-string ProductName "core.dll" --set-file-version "${{ steps.get_version.outputs.version }}" --set-product-version "${{ steps.get_version.outputs.version }}" --set-version-string FileDescription "A dll, it is a core of game engine, Commit: $env:GITHUB_SHA" --set-version-string "Comments" "Commit: $env:GITHUB_SHA" --set-version-string CompanyName "ReHLDS Dev Team" --set-version-string LegalCopyright "Copyright 2025 Valve, ReHLDS DevTeam" --set-icon rehlds/dedicated/msvc/icon.ico
+          rcedit "${{ github.workspace }}\publish\bin\win32\proxy.dll" --set-version-string ProductName "proxy.dll" --set-file-version "${{ steps.get_version.outputs.version }}" --set-product-version "${{ steps.get_version.outputs.version }}" --set-version-string FileDescription "A dll for proxying network connections, Commit: $env:GITHUB_SHA" --set-version-string "Comments" "Commit: $env:GITHUB_SHA" --set-version-string CompanyName "ReHLDS Dev Team" --set-version-string LegalCopyright "Copyright 2025 Valve, ReHLDS DevTeam" --set-icon rehlds/dedicated/msvc/icon.ico
+          rcedit "${{ github.workspace }}\publish\bin\win32\demoplayer.dll" --set-version-string ProductName "demoplayer.dll" --set-file-version "${{ steps.get_version.outputs.version }}" --set-product-version "${{ steps.get_version.outputs.version }}" --set-version-string FileDescription "A dll for demoplayer functionality, Commit: $env:GITHUB_SHA" --set-version-string "Comments" "Commit: $env:GITHUB_SHA" --set-version-string CompanyName "ReHLDS Dev Team" --set-version-string LegalCopyright "Copyright 2025 Valve, ReHLDS DevTeam" --set-icon rehlds/dedicated/msvc/icon.ico
+          rcedit "${{ github.workspace }}\publish\bin\win32\filesystem_stdio.dll" --set-version-string ProductName "filesystem_stdio.dll" --set-file-version "${{ steps.get_version.outputs.version }}" --set-product-version "${{ steps.get_version.outputs.version }}" --set-version-string FileDescription "A dll that manages file input/output operations, Commit: $env:GITHUB_SHA" --set-version-string "Comments" "Commit: $env:GITHUB_SHA" --set-version-string CompanyName "ReHLDS Dev Team" --set-version-string LegalCopyright "Copyright 2025 Valve, ReHLDS DevTeam" --set-icon rehlds/dedicated/msvc/icon.ico
+          rcedit "${{ github.workspace }}\publish\bin\win32\valve\dlls\director.dll" --set-version-string ProductName "director.dll" --set-file-version "${{ steps.get_version.outputs.version }}" --set-product-version "${{ steps.get_version.outputs.version }}" --set-version-string FileDescription "A dll used for Director functionality in Half-Life 1, Commit: $env:GITHUB_SHA" --set-version-string "Comments" "Commit: $env:GITHUB_SHA" --set-version-string CompanyName "ReHLDS Dev Team" --set-version-string LegalCopyright "Copyright 2025 Valve, ReHLDS DevTeam" --set-icon rehlds/dedicated/msvc/icon.ico
+
+      - name: Import PFX and sign
+        if: github.event_name != 'pull_request'
+        env:
+          KEY_PFX_PASS: ${{ secrets.KEY_PFX_PASS }}
+        shell: pwsh
+        run: |
+          $pfxBase64 = "${{ secrets.KEY_PFX_B64 }}"
+          [IO.File]::WriteAllBytes("${{ github.workspace }}\signing-cert.pfx", [Convert]::FromBase64String($pfxBase64))
+          certutil -f -p "${{ secrets.KEY_PFX_PASS }}" -importPFX "${{ github.workspace }}\signing-cert.pfx"
+
+          $signtool = 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x86\signtool.exe'
+          & $signtool sign /a /f "${{ github.workspace }}\signing-cert.pfx" /p $env:KEY_PFX_PASS /d "ReHLDS" /du "https://rehlds.dev/" /tr "http://timestamp.digicert.com" /td sha256 /fd sha256 /v "${{ github.workspace }}\publish\bin\win32\hlds.exe"
+          & $signtool sign /a /f "${{ github.workspace }}\signing-cert.pfx" /p $env:KEY_PFX_PASS /d "ReHLTV" /du "https://rehlds.dev/" /tr "http://timestamp.digicert.com" /td sha256 /fd sha256 /v "${{ github.workspace }}\publish\bin\win32\hltv.exe"
+          & $signtool sign /a /f "${{ github.workspace }}\signing-cert.pfx" /p $env:KEY_PFX_PASS /d "ReHLDS - swds.dll" /du "https://rehlds.dev/" /tr "http://timestamp.digicert.com" /td sha256 /fd sha256 /v "${{ github.workspace }}\publish\tests\swds.dll"
+          & $signtool sign /a /f "${{ github.workspace }}\signing-cert.pfx" /p $env:KEY_PFX_PASS /d "ReHLDS - swds.dll" /du "https://rehlds.dev/" /tr "http://timestamp.digicert.com" /td sha256 /fd sha256 /v "${{ github.workspace }}\publish\bin\win32\swds.dll"
+          & $signtool sign /a /f "${{ github.workspace }}\signing-cert.pfx" /p $env:KEY_PFX_PASS /d "ReHLDS - core.dll" /du "https://rehlds.dev/" /tr "http://timestamp.digicert.com" /td sha256 /fd sha256 /v "${{ github.workspace }}\publish\bin\win32\core.dll"
+          & $signtool sign /a /f "${{ github.workspace }}\signing-cert.pfx" /p $env:KEY_PFX_PASS /d "ReHLDS - proxy.dll" /du "https://rehlds.dev/" /td sha256 /fd sha256 /tr "http://timestamp.digicert.com" /v "${{ github.workspace }}\publish\bin\win32\proxy.dll"
+          & $signtool sign /a /f "${{ github.workspace }}\signing-cert.pfx" /p $env:KEY_PFX_PASS /d "ReHLDS - demoplayer.dll" /du "https://rehlds.dev/" /td sha256 /fd sha256 /tr "http://timestamp.digicert.com" /v "${{ github.workspace }}\publish\bin\win32\demoplayer.dll"
+          & $signtool sign /a /f "${{ github.workspace }}\signing-cert.pfx" /p $env:KEY_PFX_PASS /d "ReHLDS - filesystem_stdio.dll" /du "https://rehlds.dev/" /td sha256 /fd sha256 /tr "http://timestamp.digicert.com" /v "${{ github.workspace }}\publish\bin\win32\filesystem_stdio.dll"
+          & $signtool sign /a /f "${{ github.workspace }}\signing-cert.pfx" /p $env:KEY_PFX_PASS /d "ReHLDS - director.dll" /du "https://rehlds.dev/" /td sha256 /fd sha256 /tr "http://timestamp.digicert.com" /v "${{ github.workspace }}\publish\bin\win32\valve\dlls\director.dll"
+          Remove-Item -Recurse -Force "${{ github.workspace }}\signing-cert.pfx"
+
+      - name: Deploy artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: win32
+          path: publish/*
+
   testdemos:
-    name: 'Test demos'
+    name: Test demos
     runs-on: ubuntu-24.04
+    needs: [ windows ]
     container: rehldsorg/testdemos:latest
     defaults:
       run:
@@ -26,19 +198,29 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test: [
-          { file: 'cstrike-muliplayer-1',       desc: 'CS: Multiplayer' },
-          { file: 'rehlds-phys-single1',        desc: 'Half-Life: Physics singleplayer' },
-          { file: 'crossfire-1-multiplayer-1',  desc: 'Half-Life: Multiplayer on crossfire map' },
-          { file: 'shooting-hl-1',              desc: 'Half-Life: Shooting with several weapons' },
-        ]
+        test:
+          - { file: 'cstrike-multiplayer-1',      desc: 'CS: Multiplayer' }
+          - { file: 'rehlds-phys-single1',       desc: 'Half-Life: Physics singleplayer' }
+          - { file: 'crossfire-1-multiplayer-1', desc: 'Half-Life: Multiplayer on crossfire map' }
+          - { file: 'shooting-hl-1',             desc: 'Half-Life: Shooting with several weapons' }
 
     steps:
+      - name: Checkout (for deps)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get win32 test DLLs
+        uses: actions/download-artifact@v4
+        with:
+          name: win32
+          path: ${{ github.workspace }}/win32
+
       - name: Setup dependencies
         run: |
-          chown root ~
           rsync -a deps/rehlds/* .
-          mv $GITHUB_WORKSPACE/tests/swds.dll .
+          # copy the test swds.dll built on Windows into the container workspace
+          cp -f "$GITHUB_WORKSPACE/win32/tests/swds.dll" .
 
       - name: Play test
         env:
@@ -47,7 +229,7 @@ jobs:
         run: ./runTest.sh
 
   linux:
-    name: 'Linux'
+    name: Linux
     runs-on: ubuntu-24.04
     container: debian:11-slim
 
@@ -72,12 +254,13 @@ jobs:
           fetch-depth: 0
 
       - name: Build and Run unittests
+        shell: bash
         run: |
           rm -rf build && cmake -DCMAKE_BUILD_TYPE=Unittests -B build && cmake --build build -j8
           retVal=0
           export LD_LIBRARY_PATH="rehlds/lib/linux32:$LD_LIBRARY_PATH"
           ./build/rehlds/engine_i486 2> /dev/null > result.log || retVal=$?
-          while read line; do
+          while read -r line; do
             if [[ ${line} == *"Warning in test"* ]] ; then
               echo -e "\e[2;38m$line"
             elif [[ ${line} == *"Failure in test"* ]] ; then
@@ -85,7 +268,7 @@ jobs:
             else
               echo -e "\e[0;33m$line"
             fi
-          done <<< $(cat result.log)
+          done <<< "$(cat result.log)"
 
           if [ $retVal -ne 0 ] && [ $retVal -ne 3 ]; then
             echo -e "\e[30;41mExit code: $retVal\e[0m"
@@ -93,7 +276,6 @@ jobs:
           else
             echo -e "\e[30;43mExit code: $retVal\e[0m"
           fi
-        shell: bash
 
       - name: Build using GCC Compiler
         run: |
@@ -110,8 +292,7 @@ jobs:
 
       - name: Move files
         run: |
-          mkdir -p publish/bin/linux32/valve/dlls		  
-          
+          mkdir -p publish/bin/linux32/valve/dlls
           mv build/rehlds/engine_i486.so publish/bin/linux32/engine_i486.so
           mv rehlds/version/appversion.h publish/appversion.h
           mv build/rehlds/dedicated/hlds_linux publish/bin/linux32/hlds_linux
@@ -123,6 +304,7 @@ jobs:
           mv build/rehlds/filesystem/FileSystem_Stdio/filesystem_stdio.so publish/bin/linux32/filesystem_stdio.so
 
       - name: Run GLIBC/ABI version compat test
+        shell: bash
         run: |
           binaries=(
             "publish/bin/linux32/engine_i486.so"
@@ -134,23 +316,22 @@ jobs:
             "publish/bin/linux32/valve/dlls/director.so"
             "publish/bin/linux32/filesystem_stdio.so"
           )
-          bash ./rehlds/version/glibc_test.sh ${binaries[@]}
+          bash ./rehlds/version/glibc_test.sh "${binaries[@]}"
           if [[ $? -ne 0 ]]; then
             exit 1 # Assertion failed
           fi
-        shell: bash
 
       - name: Deploy artifacts
-        uses: actions/upload-artifact@v4
         id: upload-job
+        uses: actions/upload-artifact@v4
         with:
           name: linux32
           path: publish/*
 
   publish:
-    name: 'Publish'
+    name: Publish
     runs-on: ubuntu-24.04
-    needs: [testdemos, linux]
+    needs: [ testdemos, linux ]
 
     steps:
       - name: Deploying linux artifacts
@@ -161,12 +342,11 @@ jobs:
       - name: Reading appversion.h
         run: |
           if [ -e appversion.h ]; then
-            APP_VERSION=$(cat appversion.h | grep -wi '#define APP_VERSION_STRD' | sed -e 's/#define APP_VERSION_STRD[ \t\r\n\v\f]\+\(.*\)/\1/i' -e 's/\r//g')
+            APP_VERSION=$(grep -wi '#define APP_VERSION_STRD' appversion.h | sed -e 's/#define APP_VERSION_STRD[ \t\r\n\v\f]\+\(.*\)/\1/i' -e 's/\r//g')
             if [ $? -ne 0 ]; then
               APP_VERSION=""
             else
-              # Remove quotes
-              APP_VERSION=$(echo $APP_VERSION | xargs)
+              APP_VERSION=$(echo "$APP_VERSION" | xargs) # trim & remove quotes
               echo "APP_VERSION=${APP_VERSION}" >> $GITHUB_ENV
             fi
           fi
@@ -179,15 +359,15 @@ jobs:
                 "${{ github.ref }}" == refs/tags/* ]]; then
             echo "SIGN_READY=true" >> $GITHUB_ENV
           else
-           echo "SIGN_READY=false" >> $GITHUB_ENV
+            echo "SIGN_READY=false" >> $GITHUB_ENV
           fi
 
       - name: Final signing and Packaging bin/dbg
         id: packaging-job
+        shell: bash
         run: |
           if [[ "$SIGN_READY" == "true" ]]; then
-            echo "Signing avalible."
-
+            echo "Signing available."
             echo "${{ secrets.PUB_ASC }}" > "${{ secrets.PUB_ASC_FILE }}"
             echo "${{ secrets.KEY_ASC }}" > "${{ secrets.KEY_ASC_FILE }}"
             gpg --batch --yes --import "${{ secrets.PUB_ASC_FILE }}"
@@ -214,14 +394,12 @@ jobs:
           }
 
           # Pack and try sign final archive
-          7z a -tzip rehlds-bin-${{ env.APP_VERSION }}.zip bin/ hlsdk/
+          7z a -tzip "rehlds-bin-${{ env.APP_VERSION }}.zip" bin/ hlsdk/
           sign_file "rehlds-bin-${{ env.APP_VERSION }}.zip"
 
-          # Pack and try sign final archive
-          7z a -t7z -m0=lzma2 -mx=9 -mfb=64 -aoa rehlds-dbg-${{ env.APP_VERSION }}.7z debug/
+          # Pack and try sign debug archive
+          7z a -t7z -m0=lzma2 -mx=9 -mfb=64 -aoa "rehlds-dbg-${{ env.APP_VERSION }}.7z" debug/
           sign_file "rehlds-dbg-${{ env.APP_VERSION }}.7z"
-
-        shell: bash
 
       - name: Publish artifacts
         uses: actions/upload-artifact@v4
@@ -233,16 +411,15 @@ jobs:
             *.asc
 
       - name: Release artifacts
-        uses: softprops/action-gh-release@v2
         id: publish-job
         if: |
           startsWith(github.ref, 'refs/tags/') &&
           steps.packaging-job.outcome == 'success'
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             *.zip
             *.7z
             *.asc
-
         env:
           GITHUB_TOKEN: ${{ secrets.API_TOKEN }}
