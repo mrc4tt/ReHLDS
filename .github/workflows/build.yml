@@ -82,9 +82,11 @@ jobs:
         shell: pwsh
         run: |
           $toolset = '${{ steps.select_toolset.outputs.toolset }}'
-          msbuild '${{ env.solution }}' -p:Configuration='${{ env.buildTest }}' /t:Clean,Build /p:Platform='${{ env.buildPlatform }}' /p:PlatformToolset=$toolset /p:XPDeprecationWarning=false
-          .\ "msvc\Test Fixes\swds.exe"
-          if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 3) { exit 1 }
+          msbuild ${{ env.solution }} -p:Configuration="${{ env.buildTest }}" /t:Clean,Build /p:Platform=${{ env.buildPlatform }} /p:PlatformToolset=$toolset /p:XPDeprecationWarning=false
+          .\"msvc\Test Fixes\swds.exe"
+          If ($LASTEXITCODE -ne 0 -And
+          $LASTEXITCODE -ne 3)
+          {[Environment]::Exit(1)}
 
       - name: Build
         shell: pwsh
