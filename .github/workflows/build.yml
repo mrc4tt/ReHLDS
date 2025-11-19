@@ -147,11 +147,9 @@ jobs:
         run: |
           # Pack and try sign final archive
           7z a -tzip "rehlds-bin-${{ env.APP_VERSION }}.zip" bin/ hlsdk/
-          sign_file "rehlds-bin-${{ env.APP_VERSION }}.zip"
 
           # Pack and try sign debug archive
           7z a -t7z -m0=lzma2 -mx=9 -mfb=64 -aoa "rehlds-dbg-${{ env.APP_VERSION }}.7z" debug/
-          sign_file "rehlds-dbg-${{ env.APP_VERSION }}.7z"
 
       - name: Publish artifacts
         uses: actions/upload-artifact@v4
