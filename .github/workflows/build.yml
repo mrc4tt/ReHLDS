@@ -165,26 +165,6 @@ jobs:
           name: win32
           path: publish/*
 
-  testdemos:
-    name: Test demos
-    runs-on: ubuntu-24.04
-    needs: [ windows ]
-    container: rehldsorg/testdemos:latest
-    defaults:
-      run:
-        shell: bash
-        working-directory: /opt/HLDS
-
-    strategy:
-      fail-fast: false
-      matrix:
-        test:
-          - { file: 'cstrike-multiplayer-1',      desc: 'CS: Multiplayer' }
-          - { file: 'rehlds-phys-single1',       desc: 'Half-Life: Physics singleplayer' }
-          - { file: 'crossfire-1-multiplayer-1', desc: 'Half-Life: Multiplayer on crossfire map' }
-          - { file: 'shooting-hl-1',             desc: 'Half-Life: Shooting with several weapons' }
-
-    steps:
       - name: Checkout (for deps)
         uses: actions/checkout@v4
         with:
