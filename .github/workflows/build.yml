@@ -141,15 +141,12 @@ jobs:
           fi
           rm -f appversion.h
 
-      - name: Packaging bin/dbg
+      - name: Packaging bin
         id: packaging-job
         shell: bash
         run: |
           # Pack and try sign final archive
           7z a -tzip "rehlds-bin-${{ env.APP_VERSION }}.zip" bin/ hlsdk/
-
-          # Pack and try sign debug archive
-          7z a -t7z -m0=lzma2 -mx=9 -mfb=64 -aoa "rehlds-dbg-${{ env.APP_VERSION }}.7z" debug/
 
       - name: Publish artifacts
         uses: actions/upload-artifact@v4
