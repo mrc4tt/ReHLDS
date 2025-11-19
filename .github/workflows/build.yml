@@ -291,7 +291,7 @@ jobs:
   publish:
     name: Publish
     runs-on: ubuntu-24.04
-    needs: [ testdemos, linux ]
+    needs: [ linux ]
 
     steps:
       - name: Deploying linux artifacts
