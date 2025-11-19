@@ -114,7 +114,7 @@ jobs:
         id: upload-job
         uses: actions/upload-artifact@v4
         with:
-          name: linux32
+          name: linux32-rehlds
           path: publish/*
 
   publish:
@@ -126,7 +126,7 @@ jobs:
       - name: Deploying linux artifacts
         uses: actions/download-artifact@v4
         with:
-          name: linux32
+          name: linux32-rehlds
 
       - name: Reading appversion.h
         run: |
