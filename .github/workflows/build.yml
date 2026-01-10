@@ -112,7 +112,6 @@ jobs:
           
           # Compute CRCs for the binaries
           engine_crc = compute_crc32("publish/bin/linux32/engine_i486.so")
-          server_crc = compute_crc32("publish/bin/linux32/valve/dlls/cs.so") if os.path.exists("publish/bin/linux32/valve/dlls/cs.so") else "00000000"
           
           # Generate the override file
           override_content = (
@@ -126,10 +125,6 @@ jobs:
               '\t\t\t{\n'
               f'\t\t\t\t"linux" "{engine_crc}"\n'
               '\t\t\t}\n'
-              '\t\t\t"server"\n'
-              '\t\t\t{\n'
-              f'\t\t\t\t"linux" "{server_crc}"\n'
-              '\t\t\t}\n'
               '\t\t}\n'
               '\t}\n'
               '}\n'
@@ -140,7 +135,6 @@ jobs:
           
           print(f"Generated CRC overrides:")
           print(f"  engine:  {engine_crc}")
-          print(f"  server:  {server_crc}")
           PYTHON_EOF
 
       - name: Run GLIBC/ABI version compat test
