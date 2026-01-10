@@ -206,7 +206,6 @@ jobs:
             *.zip
             *.7z
             *.asc
-            linux_crc_overrides.txt
 
       - name: Release artifacts
         id: publish-job

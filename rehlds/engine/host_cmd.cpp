@@ -2470,7 +2470,7 @@ void Host_Version_f(void)
 	Con_Printf("Protocol version %i\nExe version %s (%s)\n", PROTOCOL_VERSION, gpszVersionString, gpszProductString);
 
 #ifdef REHLDS_FIXES
-        Con_Printf("Modified by Miksen" "\n");
+        Con_Printf("Forked by Miksen @ FSHOST.me" "\n");
 	Con_Printf("ReHLDS version: " APP_VERSION "\n");
 	Con_Printf("Build date: " __BUILD_TIME__ " " __BUILD_DATE__ " (%i)\n", build_number());
 	Con_Printf("Build from: " APP_COMMIT_URL APP_COMMIT_SHA "\n");
