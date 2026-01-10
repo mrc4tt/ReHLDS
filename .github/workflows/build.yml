@@ -81,6 +81,7 @@ jobs:
 
       - name: Move files
         run: |
+          mv rehlds/lib/linux32/libsteam_api.so publish/bin/linux32/libsteam_api.so
           mkdir -p publish/bin/linux32/valve/dlls
           mv build/rehlds/engine_i486.so publish/bin/linux32/engine_i486.so
           mv rehlds/version/appversion.h publish/appversion.h
