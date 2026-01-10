@@ -143,6 +143,9 @@ USE_STATIC_LIBSTDC              - Enables static linking library libstdc++
 * LLVM (Clang) <pre>./build.sh --compiler=clang</pre>
 * GCC          <pre>./build.sh --compiler=gcc</pre>
 
+> [!NOTE]
+> Debian 13 compatibility: ReHLDS now links all Linux binaries with `-Wl,-z,noexecstack`, ensuring the stack is non-executable. If external tooling attempts to run `execstack -s` on the produced `.so` files, it will fail with "cannot enable executable stack as shared object requires: Invalid argument" — this is expected and safe. Please avoid forcing an executable stack; modern toolchains and Debian hardening do not require it.
+
 ##### Checking build environment (Debian / Ubuntu)
 
 <details>

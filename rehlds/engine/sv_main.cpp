@@ -6600,14 +6600,16 @@ int EXT_FUNC RegUserMsg(const char *pszName, int iSize)
 	if (!pszName || Q_strlen(pszName) >= MAX_USERMESSAGES_LENGTH - 1)
 		return 0;
 
-	UserMsg *pUserMsgs = sv_gpUserMsgs;
-	while (pUserMsgs)
+	for (UserMsg *pMsg = sv_gpUserMsgs; pMsg; pMsg = pMsg->next)
 	{
-		if (!Q_strcmp(pszName, pUserMsgs->szName))
-			return pUserMsgs->iMsg;
-
-		pUserMsgs = pUserMsgs->next;
+		if (!Q_strcmp(pszName, pMsg->szName))
+			return pMsg->iMsg;
 	}
+	
+	for (UserMsg *pMsg = sv_gpNewUserMsgs; pMsg; pMsg = pMsg->next)
+	{
+		if (!Q_strcmp(pszName, pMsg->szName))
+			return pMsg->iMsg;	}
 
 	UserMsg *pNewMsg = (UserMsg *)Mem_ZeroMalloc(sizeof(UserMsg));
 	pNewMsg->iMsg = giNextUserMsg++;
