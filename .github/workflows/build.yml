@@ -220,9 +220,11 @@ jobs:
         if: success()
         continue-on-error: true
         run: |
-          # Check if the CRC overrides file exists
-          if [ ! -f linux_crc_overrides.txt ]; then
-            echo "CRC overrides file not found, skipping update"
+          # Get the engine CRC from the generated file
+          ENGINE_CRC=$(grep "engine:" publish/linux_crc_overrides.txt | grep -oP '\b[A-F0-9]{8}\b' | head -1)
+          
+          if [ -z "$ENGINE_CRC" ]; then
+            echo "Failed to extract engine CRC, skipping update"
             exit 0
           fi
 
@@ -234,18 +236,18 @@ jobs:
           git config user.email "action@github.com"
           git config user.name "GitHub Action"
 
-          # Copy the CRC overrides file
-          cp ../linux_crc_overrides.txt gamedata/custom/linux_crc_overrides.txt
+          # Update game.cstrike.txt with new engine CRC
+          sed -i "s/\"linux\" \"[A-F0-9]\{8\}\" \/\/ cstrike\/dlls\/engine_i486.so/\"linux\" \"$ENGINE_CRC\" \/\/ cstrike\/dlls\/engine_i486.so/" gamedata/custom/game.cstrike.txt
+          
+          # Also update without comment for safety
+          sed -i "/\"engine\"/,/\"server\"/{s/\"linux\" \"[A-F0-9]\{8\}\"/\"linux\" \"$ENGINE_CRC\"/;}" gamedata/custom/game.cstrike.txt
 
           # Check if there are changes
-          if git diff --quiet gamedata/custom/linux_crc_overrides.txt; then
-            echo "No changes to CRC overrides, skipping commit"
-            exit 0
+          if ! git diff --quiet gamedata/custom/game.cstrike.txt; then
+            git add gamedata/custom/game.cstrike.txt
+            git commit -m "chore: Update engine CRC from ReHLDS build ${{ github.run_number }} - Engine: $ENGINE_CRC"
+            git push
+            echo "Successfully updated game.cstrike.txt with engine CRC: $ENGINE_CRC"
+          else
+            echo "No changes to game.cstrike.txt"
           fi
-
-          # Commit and push
-          git add gamedata/custom/linux_crc_overrides.txt
-          git commit -m "chore: Update Linux CRC overrides from ReHLDS build ${{ github.run_number }}"
-          git push
-
-          echo "Successfully updated AMX MOD X fork with CRC overrides"
