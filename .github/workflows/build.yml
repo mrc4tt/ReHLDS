@@ -33,7 +33,8 @@ jobs:
             build-essential \
             libc6-dev libc6-dev-i386 \
             git cmake rsync \
-            g++ gcc
+            g++ gcc \
+            python3
 
       - name: Configure
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
