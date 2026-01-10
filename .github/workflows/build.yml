@@ -114,28 +114,28 @@ jobs:
           server_crc = compute_crc32("publish/bin/linux32/valve/dlls/cs.so") if os.path.exists("publish/bin/linux32/valve/dlls/cs.so") else "00000000"
           
           # Generate the override file
-          override_content = f'''
-"Games"
-{{
-	"*"
-	{{
-		"CRC"
-		{{
-			"engine"
-			{{
-				"linux" "{engine_crc}"
-			}}
-			"server"
-			{{
-				"linux" "{server_crc}"
-			}}
-		}}
-	}}
-}}
-'''
+          override_content = (
+              '"Games"\n'
+              '{\n'
+              '\t"*"\n'
+              '\t{\n'
+              '\t\t"CRC"\n'
+              '\t\t{\n'
+              '\t\t\t"engine"\n'
+              '\t\t\t{\n'
+              f'\t\t\t\t"linux" "{engine_crc}"\n'
+              '\t\t\t}\n'
+              '\t\t\t"server"\n'
+              '\t\t\t{\n'
+              f'\t\t\t\t"linux" "{server_crc}"\n'
+              '\t\t\t}\n'
+              '\t\t}\n'
+              '\t}\n'
+              '}\n'
+          )
           
           with open("publish/linux_crc_overrides.txt", "w") as f:
-              f.write(override_content.strip())
+              f.write(override_content)
           
           print(f"Generated CRC overrides:")
           print(f"  engine:  {engine_crc}")
