@@ -222,32 +222,62 @@ jobs:
         run: |
           # Get the engine CRC from the generated file
           ENGINE_CRC=$(grep "engine:" publish/linux_crc_overrides.txt | grep -oP '\b[A-F0-9]{8}\b' | head -1)
-          
           if [ -z "$ENGINE_CRC" ]; then
             echo "Failed to extract engine CRC, skipping update"
             exit 0
           fi
 
-          # Clone the AMX MOD X fork
           git clone https://${{ secrets.AMXMODX_PAT }}@github.com/mrc4tt/amxmodx.git amxmodx_repo
           cd amxmodx_repo
-
-          # Configure git for commits
           git config user.email "action@github.com"
           git config user.name "GitHub Action"
 
-          # Update game.cstrike.txt with new engine CRC
-          sed -i "s/\"linux\" \"[A-F0-9]\{8\}\" \/\/ cstrike\/dlls\/engine_i486.so/\"linux\" \"$ENGINE_CRC\" \/\/ cstrike\/dlls\/engine_i486.so/" gamedata/custom/game.cstrike.txt
-          
-          # Also update without comment for safety
-          sed -i "/\"engine\"/,/\"server\"/{s/\"linux\" \"[A-F0-9]\{8\}\"/\"linux\" \"$ENGINE_CRC\"/;}" gamedata/custom/game.cstrike.txt
-
-          # Check if there are changes
-          if ! git diff --quiet gamedata/custom/game.cstrike.txt; then
-            git add gamedata/custom/game.cstrike.txt
-            git commit -m "chore: Update engine CRC from ReHLDS build ${{ github.run_number }} - Engine: $ENGINE_CRC"
-            git push
-            echo "Successfully updated game.cstrike.txt with engine CRC: $ENGINE_CRC"
-          else
-            echo "No changes to game.cstrike.txt"
+          FILE="gamedata/modules.games/game.cstrike.txt"
+          if [ ! -f "$FILE" ]; then
+            echo "Missing $FILE, skipping"
+            exit 0
           fi
+
+          cp "$FILE" "$FILE.bak"
+
+          python3 - << 'PYCODE'
+          import re, pathlib
+          path = pathlib.Path("gamedata/modules.games/game.cstrike.txt")
+          text = path.read_text()
+          crc = "${ENGINE_CRC}"
+
+          server = re.search(r'("server"\s*\{)(.*?)(\})', text, flags=re.S)
+          if not server:
+              raise SystemExit("server block not found")
+
+          body = server.group(2)
+          pat = re.compile(r'"linux"\s*"[0-9A-Fa-f]+"\s*//\s*cstrike/dlls/engine_i486\.so')
+          if pat.search(body):
+              new_body = pat.sub(f'"linux" "{crc}" // cstrike/dlls/engine_i486.so', body)
+              action = "replaced"
+          else:
+              lines = body.splitlines()
+              indent = "    "
+              for line in lines:
+                  m = re.match(r'(\s+)', line)
+                  if m:
+                      indent = m.group(1)
+                      break
+              lines.insert(0, f'{indent}"linux" "{crc}" // cstrike/dlls/engine_i486.so')
+              new_body = "\n".join(lines)
+              action = "inserted"
+
+          new_text = text[:server.start(2)] + new_body + text[server.end(2):]
+          path.write_text(new_text)
+          print(f"linux CRC line {action}")
+          PYCODE
+
+          if diff "$FILE.bak" "$FILE" > /dev/null; then
+            echo "No changes to $FILE"
+            exit 0
+          fi
+
+          git add "$FILE"
+          git commit -m "chore: Update engine CRC from ReHLDS build ${{ github.run_number }} - Engine: $ENGINE_CRC"
+          git push
+          echo "Updated $FILE with engine CRC: $ENGINE_CRC"
