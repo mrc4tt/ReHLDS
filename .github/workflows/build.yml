@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 name: C/C++ CI
 
 on:
@@ -93,6 +94,54 @@ jobs:
           mv build/rehlds/HLTV/Director/director.so publish/bin/linux32/valve/dlls/director.so
           mv build/rehlds/filesystem/FileSystem_Stdio/filesystem_stdio.so publish/bin/linux32/filesystem_stdio.so
 
+      - name: Generate CRC overrides for AMX MOD X
+        shell: bash
+        run: |
+          python3 << 'PYTHON_EOF'
+          import zlib
+          import os
+          
+          def compute_crc32(filepath):
+              """Compute CRC32 checksum of a file"""
+              crc = 0
+              with open(filepath, 'rb') as f:
+                  while chunk := f.read(8192):
+                      crc = zlib.crc32(chunk, crc)
+              return f"{crc & 0xffffffff:08X}"
+          
+          # Compute CRCs for the binaries
+          engine_crc = compute_crc32("publish/bin/linux32/engine_i486.so")
+          server_crc = compute_crc32("publish/bin/linux32/valve/dlls/cs.so") if os.path.exists("publish/bin/linux32/valve/dlls/cs.so") else "00000000"
+          
+          # Generate the override file
+          override_content = f'''
+"Games"
+{{
+	"*"
+	{{
+		"CRC"
+		{{
+			"engine"
+			{{
+				"linux" "{engine_crc}"
+			}}
+			"server"
+			{{
+				"linux" "{server_crc}"
+			}}
+		}}
+	}}
+}}
+'''
+          
+          with open("publish/linux_crc_overrides.txt", "w") as f:
+              f.write(override_content.strip())
+          
+          print(f"Generated CRC overrides:")
+          print(f"  engine:  {engine_crc}")
+          print(f"  server:  {server_crc}")
+          PYTHON_EOF
+
       - name: Run GLIBC/ABI version compat test
         shell: bash
         run: |
@@ -157,6 +206,7 @@ jobs:
             *.zip
             *.7z
             *.asc
+            linux_crc_overrides.txt
 
       - name: Release artifacts
         id: publish-job
@@ -171,3 +221,37 @@ jobs:
             *.asc
         env:
           GITHUB_TOKEN: ${{ secrets.API_TOKEN }}
+
+      - name: Update AMX MOD X fork with CRC overrides
+        if: success()
+        continue-on-error: true
+        run: |
+          # Check if the CRC overrides file exists
+          if [ ! -f linux_crc_overrides.txt ]; then
+            echo "CRC overrides file not found, skipping update"
+            exit 0
+          fi
+
+          # Clone the AMX MOD X fork
+          git clone https://${{ secrets.AMXMODX_PAT }}@github.com/mrc4tt/amxmodx.git amxmodx_repo
+          cd amxmodx_repo
+
+          # Configure git for commits
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+
+          # Copy the CRC overrides file
+          cp ../linux_crc_overrides.txt gamedata/custom/linux_crc_overrides.txt
+
+          # Check if there are changes
+          if git diff --quiet gamedata/custom/linux_crc_overrides.txt; then
+            echo "No changes to CRC overrides, skipping commit"
+            exit 0
+          fi
+
+          # Commit and push
+          git add gamedata/custom/linux_crc_overrides.txt
+          git commit -m "chore: Update Linux CRC overrides from ReHLDS build ${{ github.run_number }}"
+          git push
+
+          echo "Successfully updated AMX MOD X fork with CRC overrides"
