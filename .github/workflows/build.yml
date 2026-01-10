@@ -95,30 +95,6 @@ jobs:
           mv build/rehlds/HLTV/Director/director.so publish/bin/linux32/valve/dlls/director.so
           mv build/rehlds/filesystem/FileSystem_Stdio/filesystem_stdio.so publish/bin/linux32/filesystem_stdio.so
 
-      - name: Compute engine CRC for AMX MOD X
-        shell: bash
-        run: |
-          python3 << 'PYTHON_EOF'
-          import zlib
-          
-          def compute_crc32(filepath):
-              """Compute CRC32 checksum of a file"""
-              crc = 0
-              with open(filepath, 'rb') as f:
-                  while chunk := f.read(8192):
-                      crc = zlib.crc32(chunk, crc)
-              return f"{crc & 0xffffffff:08X}"
-          
-          # Compute CRC for the engine binary
-          engine_crc = compute_crc32("publish/bin/linux32/engine_i486.so")
-          
-          # Write CRC to file for later use
-          with open("engine_crc.txt", "w") as f:
-              f.write(engine_crc)
-          
-          print(f"Engine CRC: {engine_crc}")
-          PYTHON_EOF
-
       - name: Run GLIBC/ABI version compat test
         shell: bash
         run: |
@@ -143,6 +119,154 @@ jobs:
         with:
           name: linux32-rehlds
           path: publish/*
+
+  update-amxmodx-crc:
+    name: 'Update AMX MOD X CRC'
+    runs-on: ubuntu-latest
+    needs: [linux]
+    if: github.event_name != 'pull_request'
+    
+    steps:
+      - name: Download linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux32-rehlds
+          
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libarchive-zip-perl jq
+      
+      - name: Calculate CRC32 checksum
+        id: crc
+        run: |
+          if [ ! -f "bin/linux32/engine_i486.so" ]; then
+            echo "Error: engine_i486.so not found!"
+            exit 1
+          fi
+          
+          # Calculate CRC32
+          CRC32=$(crc32 bin/linux32/engine_i486.so)
+          echo "CRC32 checksum: $CRC32"
+          
+          # Convert to uppercase hex format
+          CRC32_HEX=$(echo "$CRC32" | tr '[:lower:]' '[:upper:]')
+          echo "crc32_hex=$CRC32_HEX" >> $GITHUB_OUTPUT
+          echo "CRC32 HEX: $CRC32_HEX"
+          
+          # Display file info
+          ls -lh bin/linux32/engine_i486.so
+      
+      - name: Checkout AMX MOD X fork
+        uses: actions/checkout@v4
+        with:
+          repository: mrc4tt/amxmodx
+          token: ${{ secrets.AMXMODX_PAT }}
+          path: amxmodx-repo
+      
+      - name: Update game.cstrike.txt with new engine CRC
+        id: update
+        run: |
+          cd amxmodx-repo
+          FILE="gamedata/modules.games/game.cstrike.txt"
+          CRC32_HEX="${{ steps.crc.outputs.crc32_hex }}"
+
+          if [ ! -f "$FILE" ]; then
+            echo "Error: $FILE not found in AMX MOD X repo!"
+            exit 1
+          fi
+
+          echo "Original file content (server section):"
+          sed -n '/"server"/,/^[[:space:]]*"[^"]*"[[:space:]]*$/p' "$FILE" | head -20
+
+          cp "$FILE" "$FILE.bak"
+
+          python3 - <<'PYCODE'
+          import re, pathlib
+          
+          path = pathlib.Path("gamedata/modules.games/game.cstrike.txt")
+          text = path.read_text()
+          crc = "${{ steps.crc.outputs.crc32_hex }}"
+          
+          server_block = re.search(r'("server"\s*\{)(.*?)(\})', text, flags=re.S)
+          if not server_block:
+              raise SystemExit("server block not found")
+          
+          block_body = server_block.group(2)
+          
+          # Look for existing engine block
+          engine_match = re.search(r'("engine"\s*\{)(.*?)(\})', block_body, flags=re.S)
+          
+          if engine_match:
+              # Engine block exists, update or add linux CRC within it
+              engine_body = engine_match.group(2)
+              linux_pat = re.compile(r'"linux"\s*"[0-9A-Fa-f]+"')
+              if linux_pat.search(engine_body):
+                  # Replace existing linux CRC
+                  new_engine_body = linux_pat.sub(f'"linux" "{crc}"', engine_body)
+                  action = "replaced"
+              else:
+                  # Add linux CRC to engine block
+                  lines = engine_body.splitlines()
+                  indent = "\t\t\t"
+                  for line in lines:
+                      m = re.match(r'(\s+)', line)
+                      if m:
+                          indent = m.group(1)
+                          break
+                  lines.append(f'{indent}"linux" "{crc}"')
+                  new_engine_body = "\n".join(lines)
+                  action = "added to engine"
+              
+              new_body = block_body[:engine_match.start(2)] + new_engine_body + block_body[engine_match.end(2):]
+          else:
+              # No engine block, create one after the opening brace
+              lines = block_body.splitlines()
+              indent = "\t\t"
+              for line in lines:
+                  m = re.match(r'(\s+)', line)
+                  if m:
+                      indent = m.group(1)
+                      break
+              engine_block = f'\n{indent}"engine"\n{indent}{{\n{indent}\t"linux" "{crc}"\n{indent}}}'
+              # Insert at the beginning
+              new_body = engine_block + block_body
+              action = "engine block inserted"
+          
+          new_text = text[:server_block.start(2)] + new_body + text[server_block.end(2):]
+          path.write_text(new_text)
+          print(f"Engine CRC {action}")
+          PYCODE
+
+          echo ""
+          echo "Updated file content (server section):"
+          sed -n '/"server"/,/^[[:space:]]*"[^"]*"[[:space:]]*$/p' "$FILE" | head -20
+
+          if diff "$FILE.bak" "$FILE" > /dev/null; then
+            echo "No changes detected in $FILE"
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "File successfully updated!"
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+          rm "$FILE.bak"
+      
+      - name: Commit and push changes to AMX MOD X
+        if: steps.update.outputs.changed == 'true'
+        run: |
+          cd amxmodx-repo
+          
+          git config user.name "ReHLDS Build Bot"
+          git config user.email "actions@github.com"
+          
+          git add gamedata/modules.games/game.cstrike.txt
+          
+          BUILD_NR="${{ github.run_number }}"
+          CRC32_HEX="${{ steps.crc.outputs.crc32_hex }}"
+          
+          git commit -m "chore: Update engine CRC from ReHLDS build ${BUILD_NR} - Engine: ${CRC32_HEX}"
+          git push
 
   publish:
     name: Publish
@@ -197,97 +321,3 @@ jobs:
             *.asc
         env:
           GITHUB_TOKEN: ${{ secrets.API_TOKEN }}
-
-      - name: Update AMX MOD X fork with engine CRC
-        if: success()
-        continue-on-error: true
-        run: |
-          # Get the engine CRC from the computed file
-          if [ ! -f "engine_crc.txt" ]; then
-            echo "Failed to find engine CRC file, skipping update"
-            exit 0
-          fi
-          
-          ENGINE_CRC=$(cat engine_crc.txt)
-          if [ -z "$ENGINE_CRC" ]; then
-            echo "Failed to read engine CRC, skipping update"
-            exit 0
-          fi
-
-          git clone https://${{ secrets.AMXMODX_PAT }}@github.com/mrc4tt/amxmodx.git amxmodx_repo
-          cd amxmodx_repo
-          git config user.email "action@github.com"
-          git config user.name "GitHub Action"
-
-          FILE="gamedata/modules.games/game.cstrike.txt"
-          if [ ! -f "$FILE" ]; then
-            echo "Missing $FILE, skipping"
-            exit 0
-          fi
-
-          cp "$FILE" "$FILE.bak"
-
-          python3 - << 'PYCODE'
-          import re, pathlib
-          path = pathlib.Path("gamedata/modules.games/game.cstrike.txt")
-          text = path.read_text()
-          crc = "${ENGINE_CRC}"
-
-          server = re.search(r'("server"\s*\{)(.*?)(\})', text, flags=re.S)
-          if not server:
-              raise SystemExit("server block not found")
-
-          body = server.group(2)
-          
-          # Look for existing engine block
-          engine_match = re.search(r'("engine"\s*\{)(.*?)(\})', body, flags=re.S)
-          
-          if engine_match:
-              # Engine block exists, update or add linux CRC within it
-              engine_body = engine_match.group(2)
-              linux_pat = re.compile(r'"linux"\s*"[0-9A-Fa-f]+"')
-              if linux_pat.search(engine_body):
-                  # Replace existing linux CRC
-                  new_engine_body = linux_pat.sub(f'"linux" "{crc}"', engine_body)
-                  action = "replaced"
-              else:
-                  # Add linux CRC to engine block
-                  lines = engine_body.splitlines()
-                  indent = "\t\t\t"
-                  for line in lines:
-                      m = re.match(r'(\s+)', line)
-                      if m:
-                          indent = m.group(1)
-                          break
-                  lines.append(f'{indent}"linux" "{crc}"')
-                  new_engine_body = "\n".join(lines)
-                  action = "added to engine"
-              
-              new_body = body[:engine_match.start(2)] + new_engine_body + body[engine_match.end(2):]
-          else:
-              # No engine block, create one
-              lines = body.splitlines()
-              indent = "\t\t"
-              for line in lines:
-                  m = re.match(r'(\s+)', line)
-                  if m:
-                      indent = m.group(1)
-                      break
-              engine_block = f'{indent}"engine"\n{indent}{{\n{indent}\t"linux" "{crc}"\n{indent}}}\n'
-              new_body = engine_block + body
-              action = "engine block inserted"
-
-          new_text = text[:server.start(2)] + new_body + text[server.end(2):]
-          path.write_text(new_text)
-          print(f"Engine CRC {action}")
-          PYCODE
-
-          if diff "$FILE.bak" "$FILE" > /dev/null; then
-            echo "No changes to $FILE"
-            exit 0
-          fi
-
-          git add "$FILE"
-          git commit -m "chore: Update engine CRC from ReHLDS build ${{ github.run_number }} - Engine: $ENGINE_CRC"
-          git push
-          echo "Updated $FILE with engine CRC: $ENGINE_CRC"
