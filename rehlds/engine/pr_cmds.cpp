@@ -2304,6 +2304,7 @@ void EXT_FUNC PF_MessageEnd_I(void)
 		}
 #endif
 	}
+
 #ifdef REHLDS_FIXES
 	if (gMsgDest == MSG_ALL)
 	{
@@ -2326,7 +2327,8 @@ void EXT_FUNC PF_MessageEnd_I(void)
 	else
 #endif
 	{
-		writer();
+		sizebuf_t *pBuffer = WriteDest_Parm(gMsgDest);
+		WriteMessageToBuffer(isVariableLengthMsg, pBuffer);
 	}
 
 	switch (gMsgDest)
