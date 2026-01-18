@@ -315,7 +315,7 @@ void EXT_FUNC Cvar_DirectSet_internal(struct cvar_s *var, const char *value)
 				pHook->hook(var);
 				break;
 			}
-		}	
+		}
 
 #ifdef REHLDS_API
 		Cvar_FireListeners(var->name, pszValue);

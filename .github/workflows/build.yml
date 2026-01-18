@@ -188,22 +188,23 @@ jobs:
           text = path.read_text()
           crc = "${{ steps.crc.outputs.crc32_hex }}"
           
-          server_block = re.search(r'("server"\s*\{)(.*?)(\})', text, flags=re.S)
-          if not server_block:
-              raise SystemExit("server block not found")
+          # Find the CRC block (which contains both engine and server)
+          crc_block = re.search(r'("CRC"\s*\{)(.*?)(\n\s*\})', text, flags=re.S)
+          if not crc_block:
+              raise SystemExit("CRC block not found")
           
-          block_body = server_block.group(2)
+          block_body = crc_block.group(2)
           
-          # Look for existing engine block
-          engine_match = re.search(r'("engine"\s*\{)(.*?)(\})', block_body, flags=re.S)
+          # Look for existing engine block at the same level as server
+          engine_match = re.search(r'("engine"\s*\{)(.*?)(\n\s*\})', block_body, flags=re.S)
           
           if engine_match:
               # Engine block exists, update or add linux CRC within it
               engine_body = engine_match.group(2)
-              linux_pat = re.compile(r'"linux"\s*"[0-9A-Fa-f]+"')
+              linux_pat = re.compile(r'"linux"\s*"[0-9A-Fa-f]+"(?:\s*//.*)?')
               if linux_pat.search(engine_body):
-                  # Replace existing linux CRC
-                  new_engine_body = linux_pat.sub(f'"linux" "{crc}"', engine_body)
+                  # Replace existing linux CRC (preserve or add comment)
+                  new_engine_body = linux_pat.sub(f'"linux" "{crc}" // engine_i486.so', engine_body)
                   action = "replaced"
               else:
                   # Add linux CRC to engine block
@@ -214,26 +215,42 @@ jobs:
                       if m:
                           indent = m.group(1)
                           break
-                  lines.append(f'{indent}"linux" "{crc}"')
+                  if lines and lines[-1].strip():
+                      lines.append(f'{indent}"linux" "{crc}" // engine_i486.so')
+                  else:
+                      lines.insert(-1, f'{indent}"linux" "{crc}" // engine_i486.so')
                   new_engine_body = "\n".join(lines)
                   action = "added to engine"
               
               new_body = block_body[:engine_match.start(2)] + new_engine_body + block_body[engine_match.end(2):]
           else:
-              # No engine block, create one after the opening brace
-              lines = block_body.splitlines()
-              indent = "\t\t"
-              for line in lines:
-                  m = re.match(r'(\s+)', line)
-                  if m:
-                      indent = m.group(1)
-                      break
-              engine_block = f'\n{indent}"engine"\n{indent}{{\n{indent}\t"linux" "{crc}"\n{indent}}}'
-              # Insert at the beginning
-              new_body = engine_block + block_body
-              action = "engine block inserted"
+              # No engine block, create one before the server block
+              server_match = re.search(r'"server"\s*\{', block_body)
+              if server_match:
+                  insert_pos = server_match.start()
+                  indent = "\t\t"
+                  # Try to detect indent from server line
+                  line_start = block_body.rfind('\n', 0, insert_pos) + 1
+                  if line_start > 0:
+                      indent = re.match(r'(\s*)', block_body[line_start:]).group(1)
+                  
+                  engine_block = f'{indent}"engine"\n{indent}{{\n{indent}\t"linux" "{crc}" // engine_i486.so\n{indent}}}\n'
+                  new_body = block_body[:insert_pos] + engine_block + block_body[insert_pos:]
+                  action = "engine block inserted"
+              else:
+                  # Fallback: insert at the beginning
+                  lines = block_body.splitlines()
+                  indent = "\t\t"
+                  for line in lines:
+                      m = re.match(r'(\s+)', line)
+                      if m:
+                          indent = m.group(1)
+                          break
+                  engine_block = f'\n{indent}"engine"\n{indent}{{\n{indent}\t"linux" "{crc}" // engine_i486.so\n{indent}}}'
+                  new_body = engine_block + block_body
+                  action = "engine block inserted at start"
           
-          new_text = text[:server_block.start(2)] + new_body + text[server_block.end(2):]
+          new_text = text[:crc_block.start(2)] + new_body + text[crc_block.end(2):]
           path.write_text(new_text)
           print(f"Engine CRC {action}")
           PYCODE
