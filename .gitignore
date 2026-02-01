@@ -4,6 +4,8 @@
 *.log
 *.lnk
 *.aps
+*.pat
+actionlinit
 **/msvc/Debug*
 **/msvc/Release*
 **/msvc/Tests
