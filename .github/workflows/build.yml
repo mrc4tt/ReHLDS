@@ -183,76 +183,98 @@ jobs:
 
           python3 - <<'PYCODE'
           import re, pathlib
-          
+
           path = pathlib.Path("gamedata/modules.games/game.cstrike.txt")
           text = path.read_text()
           crc = "${{ steps.crc.outputs.crc32_hex }}"
-          
-          # Find the CRC block (which contains both engine and server)
-          crc_block = re.search(r'("CRC"\s*\{)(.*?)(\n\s*\})', text, flags=re.S)
-          if not crc_block:
+
+          # Find the top-level CRC block. Use a brace-balanced scan so nested
+          # braces inside the block don't terminate the match early.
+          crc_header = re.search(r'"CRC"\s*\{', text)
+          if not crc_header:
               raise SystemExit("CRC block not found")
-          
-          block_body = crc_block.group(2)
-          
-          # Look for existing engine block at the same level as server
-          engine_match = re.search(r'("engine"\s*\{)(.*?)(\n\s*\})', block_body, flags=re.S)
-          
-          if engine_match:
-              # Engine block exists, update or add linux CRC within it
-              engine_body = engine_match.group(2)
-              linux_pat = re.compile(r'"linux"\s*"[0-9A-Fa-f]+"(?:\s*//.*)?')
-              if linux_pat.search(engine_body):
-                  # Replace existing linux CRC (preserve or add comment)
-                  new_engine_body = linux_pat.sub(f'"linux" "{crc}" // engine_i486.so', engine_body)
-                  action = "replaced"
-              else:
-                  # Add linux CRC to engine block
-                  lines = engine_body.splitlines()
-                  indent = "\t\t\t"
-                  for line in lines:
-                      m = re.match(r'(\s+)', line)
-                      if m:
-                          indent = m.group(1)
-                          break
-                  if lines and lines[-1].strip():
-                      lines.append(f'{indent}"linux" "{crc}" // engine_i486.so')
-                  else:
-                      lines.insert(-1, f'{indent}"linux" "{crc}" // engine_i486.so')
-                  new_engine_body = "\n".join(lines)
-                  action = "added to engine"
-              
-              new_body = block_body[:engine_match.start(2)] + new_engine_body + block_body[engine_match.end(2):]
+
+          body_start = crc_header.end()
+          depth = 1
+          i = body_start
+          while i < len(text) and depth > 0:
+              c = text[i]
+              if c == '{':
+                  depth += 1
+              elif c == '}':
+                  depth -= 1
+                  if depth == 0:
+                      break
+              i += 1
+          if depth != 0:
+              raise SystemExit("Unbalanced braces in CRC block")
+          body_end = i  # index of the closing '}'
+
+          block_body = text[body_start:body_end]
+
+          # Detect indent of the CRC block's closing brace (a stable reference,
+          # since first-line indent inside the body may be corrupted by prior runs)
+          # and add one tab for child blocks.
+          line_start = text.rfind('\n', 0, body_end) + 1
+          crc_indent = re.match(r'[ \t]*', text[line_start:body_end]).group(0)
+          indent = crc_indent + "\t"
+
+          # Strip ALL existing "engine" { ... } sub-blocks. We match starting
+          # at the line itself (the leading newline is preserved so the
+          # surrounding structure stays intact). Repeated runs of the old
+          # script stacked these blocks, so this run normalizes them away.
+          def strip_engine_blocks(s: str) -> str:
+              out = []
+              j = 0
+              pat = re.compile(r'^[ \t]*"engine"\s*\{', re.M)
+              while True:
+                  m = pat.search(s, j)
+                  if not m:
+                      out.append(s[j:])
+                      break
+                  out.append(s[j:m.start()])
+                  k = m.end()
+                  d = 1
+                  while k < len(s) and d > 0:
+                      if s[k] == '{':
+                          d += 1
+                      elif s[k] == '}':
+                          d -= 1
+                      k += 1
+                  # consume the rest of the line (any trailing whitespace + newline)
+                  while k < len(s) and s[k] in ' \t':
+                      k += 1
+                  if k < len(s) and s[k] == '\n':
+                      k += 1
+                  j = k
+              return ''.join(out)
+
+          cleaned_body = strip_engine_blocks(block_body)
+
+          # Build a single fresh engine block (own line, with trailing newline).
+          engine_block = (
+              f'{indent}"engine"\n'
+              f'{indent}{{\n'
+              f'{indent}\t"linux" "{crc}" // engine_i486.so\n'
+              f'{indent}}}\n'
+          )
+
+          # Insert before "server" if present, otherwise at the top of the body.
+          server_match = re.search(r'^[ \t]*"server"\s*\{', cleaned_body, re.M)
+          if server_match:
+              insert_at = server_match.start()
+              new_body = cleaned_body[:insert_at] + engine_block + cleaned_body[insert_at:]
           else:
-              # No engine block, create one before the server block
-              server_match = re.search(r'"server"\s*\{', block_body)
-              if server_match:
-                  insert_pos = server_match.start()
-                  indent = "\t\t"
-                  # Try to detect indent from server line
-                  line_start = block_body.rfind('\n', 0, insert_pos) + 1
-                  if line_start > 0:
-                      indent = re.match(r'(\s*)', block_body[line_start:]).group(1)
-                  
-                  engine_block = f'{indent}"engine"\n{indent}{{\n{indent}\t"linux" "{crc}" // engine_i486.so\n{indent}}}\n'
-                  new_body = block_body[:insert_pos] + engine_block + block_body[insert_pos:]
-                  action = "engine block inserted"
-              else:
-                  # Fallback: insert at the beginning
-                  lines = block_body.splitlines()
-                  indent = "\t\t"
-                  for line in lines:
-                      m = re.match(r'(\s+)', line)
-                      if m:
-                          indent = m.group(1)
-                          break
-                  engine_block = f'\n{indent}"engine"\n{indent}{{\n{indent}\t"linux" "{crc}" // engine_i486.so\n{indent}}}'
-                  new_body = engine_block + block_body
-                  action = "engine block inserted at start"
-          
-          new_text = text[:crc_block.start(2)] + new_body + text[crc_block.end(2):]
+              # Make sure body starts with a newline so the block sits on its own line
+              prefix = '' if cleaned_body.startswith('\n') else '\n'
+              new_body = prefix + engine_block + cleaned_body.lstrip('\n')
+
+          # Collapse runs of blank lines that may accumulate from prior cruft.
+          new_body = re.sub(r'\n{3,}', '\n\n', new_body)
+
+          new_text = text[:body_start] + new_body + text[body_end:]
           path.write_text(new_text)
-          print(f"Engine CRC {action}")
+          print("Engine CRC normalized: all prior engine blocks removed, one fresh block inserted")
           PYCODE
 
           echo ""
