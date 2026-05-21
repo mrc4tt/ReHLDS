@@ -1,0 +1,22 @@
+# Local ReHLDS build — mirrors the GitHub Actions linux job.
+# Use the ./docker-build.sh wrapper so build/ artifacts are owned by you,
+# not by root:
+#
+#   ./docker-build.sh             # unittest build + run, then release build
+#   ./docker-build.sh unittest    # unittest build + run only
+#   ./docker-build.sh release     # release build only
+services:
+  build:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: rehlds-build:debian11
+    volumes:
+      - .:/src
+    working_dir: /src
+    # Set by docker-build.sh to the host user, so build/ is not root-owned.
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    # A non-root user has no home dir in the image; git config --global
+    # needs a writable HOME.
+    environment:
+      HOME: /tmp

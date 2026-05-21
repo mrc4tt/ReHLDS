@@ -1,4 +1,5 @@
 **/build
+publish/
 *.iml
 *.bat
 *.log
@@ -22,3 +23,5 @@ actionlinit
 **/msvc/ipch
 
 rehlds/version/appversion.h
+*.sh
+hm

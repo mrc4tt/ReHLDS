@@ -1,0 +1,10 @@
+# nektos/act config — run the GitHub Actions workflow locally.
+#
+#   act -j linux        # run ONLY the linux build job (safe)
+#
+# WARNING: do NOT run the whole workflow. The `update-amxmodx-crc` job
+# pushes a commit to the mrc4tt/amxmodx repo using a PAT secret. Always
+# target the linux job explicitly with `-j linux`.
+-P ubuntu-24.04=catthehacker/ubuntu:act-24.04
+-P ubuntu-latest=catthehacker/ubuntu:act-latest
+--artifact-server-path /tmp/act-artifacts
