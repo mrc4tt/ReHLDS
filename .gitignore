@@ -25,3 +25,5 @@ actionlinit
 rehlds/version/appversion.h
 *.sh
 hm
+*.dockerignore
+*.actrc
