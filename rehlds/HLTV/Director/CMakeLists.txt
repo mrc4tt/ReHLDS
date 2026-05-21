@@ -118,3 +118,13 @@ set_target_properties(director PROPERTIES
 	LINK_FLAGS ${LINK_FLAGS}
 	POSITION_INDEPENDENT_CODE OFF
 )
+
+# Mirror the CI publish layout for local builds: drop director.so into both
+# the valve and cstrike game dirs so CS1.6 servers pick it up.
+set(PUBLISH_BIN_DIR "${CMAKE_SOURCE_DIR}/publish/bin/linux32")
+add_custom_command(TARGET director POST_BUILD
+	COMMAND ${CMAKE_COMMAND} -E make_directory "${PUBLISH_BIN_DIR}/valve/dlls" "${PUBLISH_BIN_DIR}/cstrike/dlls"
+	COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:director>" "${PUBLISH_BIN_DIR}/valve/dlls/director.so"
+	COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:director>" "${PUBLISH_BIN_DIR}/cstrike/dlls/director.so"
+	COMMENT "Publishing director.so to valve/dlls and cstrike/dlls"
+)

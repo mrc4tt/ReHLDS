@@ -84,7 +84,7 @@ jobs:
 
       - name: Move files
         run: |
-          mkdir -p publish/bin/linux32/valve/dlls
+          mkdir -p publish/bin/linux32/valve/dlls publish/bin/linux32/cstrike/dlls
           mv rehlds/lib/linux32/libsteam_api.so publish/bin/linux32/libsteam_api.so
           mv build/rehlds/engine_i486.so publish/bin/linux32/engine_i486.so
           mv rehlds/version/appversion.h publish/appversion.h
@@ -94,6 +94,7 @@ jobs:
           mv build/rehlds/HLTV/Proxy/proxy.so publish/bin/linux32/proxy.so
           mv build/rehlds/HLTV/DemoPlayer/demoplayer.so publish/bin/linux32/demoplayer.so
           mv build/rehlds/HLTV/Director/director.so publish/bin/linux32/valve/dlls/director.so
+          cp publish/bin/linux32/valve/dlls/director.so publish/bin/linux32/cstrike/dlls/director.so
           mv build/rehlds/filesystem/FileSystem_Stdio/filesystem_stdio.so publish/bin/linux32/filesystem_stdio.so
 
       - name: Run GLIBC/ABI version compat test
