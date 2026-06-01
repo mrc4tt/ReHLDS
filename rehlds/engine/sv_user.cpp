@@ -1050,7 +1050,7 @@ void SV_RunCmd(usercmd_t* ucmd, int random_seed, qboolean fNetCmd, qboolean fCho
 	sv_player->v.vuser4[2] = pmove->vuser4[2];
 
 	SetMinMaxSize(sv_player, player_mins[pmove->usehull], player_maxs[pmove->usehull], 0);
-	if (host_client->edict->v.solid)
+	if (host_client->edict && host_client->edict->v.solid)
 	{
 		SV_LinkEdict(sv_player, TRUE);
 		vec3_t vel;
