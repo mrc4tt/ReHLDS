@@ -51,6 +51,7 @@ Master::Master()
 	m_NoMaster = false;
 	m_bMasterLoaded = false;
 	m_bSteamInitialized = false;
+	m_bSteamInitFailed = false;
 
 	m_flMasterUpdateTime = 0;
 }
@@ -87,6 +88,7 @@ bool Master::Init(IBaseSystem *system, int serial, char *name)
 	}
 
 	m_bSteamInitialized = false;
+	m_bSteamInitFailed = false;
 	m_System->Printf("Master module initialized.\n");
 
 	return true;
@@ -113,7 +115,7 @@ void Master::RunFrame(double time)
 
 	if (m_Proxy->IsActive())
 	{
-		if (!m_bSteamInitialized)
+		if (!m_bSteamInitialized && !m_bSteamInitFailed)
 		{
 			IWorld *world = m_Proxy->GetWorld();
 			if (world)
@@ -151,6 +153,9 @@ void Master::RunFrame(double time)
 				}
 
 				m_bSteamInitialized = SteamGameServer() ? true : false;
+				// Steam init failed (e.g. steamclient.so missing) -> don't retry every frame, avoids log spam
+				if (!m_bSteamInitialized)
+					m_bSteamInitFailed = true;
 			}
 		}
 

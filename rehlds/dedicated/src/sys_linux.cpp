@@ -27,6 +27,8 @@
 */
 
 #include "precompiled.h"
+#include <time.h>   // nanosleep
+#include <sched.h>  // sched_yield
 
 class CSys: public ISys {
 public:
@@ -95,6 +97,60 @@ void Sleep_Select(int msec)
 void Sleep_Net(int msec)
 {
 	NET_Sleep_Timeout();
+}
+
+// pingboost 4: high-resolution nanosleep.
+//
+// Backed by the kernel hrtimer subsystem, so it honours sub-millisecond
+// requests instead of rounding up to the scheduler tick like usleep on
+// older kernels. Lower frame jitter than Sleep_Old at negligible CPU cost.
+void Sleep_NanoSleep(int msec)
+{
+	struct timespec req;
+	req.tv_sec = msec / 1000;
+	req.tv_nsec = (long)(msec % 1000) * 1000000L;
+
+	// restart with the remaining time if interrupted by a signal
+	while (nanosleep(&req, &req) == -1 && errno == EINTR)
+		continue;
+}
+
+// pingboost 5: busy-wait spin with scheduler yield.
+//
+// Does not sleep at all: spins until the requested time has elapsed, calling
+// sched_yield() so other runnable threads still make progress. Gives the
+// lowest possible wake-up latency but pins a CPU core at ~100%. Intended for
+// dedicated boxes that trade power for ping.
+//
+// Uses gettimeofday() rather than clock_gettime(CLOCK_MONOTONIC) on purpose:
+// clock_gettime moved from librt into libc at glibc 2.17, which would pull a
+// GLIBC_2.17 symbol and break the GLIBC_2.11 compat ceiling enforced by
+// rehlds/version/glibc_test.sh. gettimeofday is GLIBC_2.2.5 and its µs
+// resolution is plenty for a millisecond-scale spin.
+void Sleep_BusyWait(int msec)
+{
+	if (msec <= 0) {
+		sched_yield();
+		return;
+	}
+
+	struct timeval start;
+	gettimeofday(&start, nullptr);
+
+	const long target_us = (long)msec * 1000L;
+
+	for (;;) {
+		struct timeval now;
+		gettimeofday(&now, nullptr);
+
+		long elapsed_us = (now.tv_sec - start.tv_sec) * 1000000L
+			+ (now.tv_usec - start.tv_usec);
+
+		if (elapsed_us >= target_us)
+			break;
+
+		sched_yield();
+	}
 }
 
 // linux runs on a 100Hz scheduling clock, so the minimum latency from
@@ -167,6 +223,12 @@ void Sys_InitPingboost()
 			// we Sys_GetProcAddress NET_Sleep() from
 			//engine_i486.so later in this function
 			NET_Sleep_Timeout = (NET_Sleep_t)Sys_GetProcAddress(g_pEngineModule, "NET_Sleep_Timeout");
+			break;
+		case 4:
+			Sys_Sleep = Sleep_NanoSleep;
+			break;
+		case 5:
+			Sys_Sleep = Sleep_BusyWait;
 			break;
 		// just in case
 		default:

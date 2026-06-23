@@ -203,6 +203,16 @@ cvar_t sv_newunit = { "sv_newunit", "0", 0, 0.0f, NULL };
 
 cvar_t sv_clienttrace = { "sv_clienttrace", "1", FCVAR_SERVER, 0.0f, NULL };
 cvar_t sv_timeout = { "sv_timeout", "60", 0, 0.0f, NULL };
+#ifdef REHLDS_FIXES
+// Hard deadline (in seconds) for a client to complete a reconnect after a level change.
+// A client that SV_InactivateClients put into the reconnect-pending state but that never
+// re-initiates its connection within this window is force-dropped by SV_CheckTimeouts,
+// independent of the netchan inactivity timeout. This defeats the oxware "svc_stufftext
+// reconnect filter" phantom-slot exploit: the cheat blocks the engine's "reconnect" command
+// on changelevel and keeps the netchan warm, so the normal sv_timeout (which keys off
+// netchan.last_received) never fires and the half-connected slot survives forever. 0 = disabled.
+cvar_t sv_reconnect_timeout = { "sv_reconnect_timeout", "30", 0, 0.0f, NULL };
+#endif // REHLDS_FIXES
 cvar_t sv_failuretime = { "sv_failuretime", "0.5", 0, 0.0f, NULL };
 cvar_t sv_cheats = { "sv_cheats", "0", FCVAR_SERVER, 0.0f, NULL };
 cvar_t sv_password = { "sv_password", "", FCVAR_SERVER | FCVAR_PROTECTED, 0.0f, NULL };
@@ -2523,6 +2533,10 @@ void EXT_FUNC SV_ConnectClient_internal(void)
 #ifdef REHLDS_FIXES
 	host_client->m_bSentNewResponse = FALSE;
 	g_GameClients[host_client - g_psvs.clients]->SetSpawnedOnce(false);
+	// Client (re)established its connection, so it obeyed the level-change "reconnect" command.
+	// Disarm the deadline armed by SV_InactivateClients. This happens before any resource
+	// download/spawn, so downloading players are never affected.
+	g_GameClients[host_client - g_psvs.clients]->SetReconnectDeadline(0.0);
 #endif // REHLDS_FIXES
 
 	bIsSecure = Steam_GSBSecure();
@@ -3985,6 +3999,29 @@ void SV_CheckTimeouts(void)
 	{
 		if (cl->fakeclient)
 			continue;
+#ifdef REHLDS_FIXES
+		// Force-drop a client that was inactivated on level change but never re-initiated its
+		// connection within sv_reconnect_timeout. This deadline is measured from the inactivation
+		// time (see SV_InactivateClients), NOT from netchan.last_received, so a cheat that keeps
+		// the netchan warm to block the "reconnect" command (oxware svc_stufftext filter ->
+		// phantom slot) cannot dodge it the way it dodges the normal sv_timeout.
+		double reconnectDeadline = g_GameClients[i]->GetReconnectDeadline();
+		if (reconnectDeadline != 0.0)
+		{
+			if (cl->fully_connected)
+			{
+				// Reconnect finished normally; stand down.
+				g_GameClients[i]->SetReconnectDeadline(0.0);
+			}
+			else if (sv_reconnect_timeout.value > 0.0 && (realtime - reconnectDeadline) > sv_reconnect_timeout.value)
+			{
+				Con_DPrintf("Dropping %s: failed to reconnect within %.0fs after level change\n", cl->name, sv_reconnect_timeout.value);
+				g_GameClients[i]->SetReconnectDeadline(0.0);
+				SV_DropClient(cl, FALSE, "Failed to reconnect after level change");
+				continue;
+			}
+		}
+#endif // REHLDS_FIXES
 		if (!cl->connected && !cl->active && !cl->spawned)
 			continue;
 		if (cl->netchan.last_received < droptime)
@@ -7714,6 +7751,14 @@ void SV_InactivateClients(void)
 			cl->hasusrmsgs = FALSE;
 			cl->m_bSentNewResponse = FALSE;
 
+#ifdef REHLDS_FIXES
+			// Arm the reconnect deadline: this slot must re-initiate its connection
+			// (SV_ConnectClient clears it) within sv_reconnect_timeout, or SV_CheckTimeouts
+			// force-drops it regardless of netchan activity. Closes the oxware changelevel
+			// phantom-slot exploit, where the cheat blocks "reconnect" and keeps the netchan warm.
+			g_GameClients[i]->SetReconnectDeadline(realtime);
+#endif // REHLDS_FIXES
+
 			SZ_Clear(&cl->netchan.message);
 			SZ_Clear(&cl->datagram);
 
@@ -8309,6 +8354,9 @@ void SV_Init(void)
 	Cvar_RegisterVariable(&sv_skyvec_y);
 	Cvar_RegisterVariable(&sv_skyvec_z);
 	Cvar_RegisterVariable(&sv_timeout);
+#ifdef REHLDS_FIXES
+	Cvar_RegisterVariable(&sv_reconnect_timeout);
+#endif // REHLDS_FIXES
 	Cvar_RegisterVariable(&sv_clienttrace);
 	Cvar_RegisterVariable(&sv_zmax);
 	Cvar_RegisterVariable(&sv_wateramp);

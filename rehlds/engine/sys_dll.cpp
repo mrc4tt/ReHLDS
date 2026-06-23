@@ -953,9 +953,22 @@ void LoadEntityDLLs(const char *szBaseDir)
 
 #endif // REHLDS_FIXES
 				{
+#ifdef REHLDS_FIXES
+					szDllFilename[0] = '\0';
+					if (!FS_GetLocalPath(szValue, szDllFilename, sizeof(szDllFilename)) || szDllFilename[0] == '\0')
+					{
+						Con_Printf("Couldn't locate game DLL \"%s\" listed in %s (file missing? metamod deleted?)\n", szValue, szDllListFile);
+					}
+					else
+					{
+						Con_DPrintf("\nAdding:  %s/%s\n", szGameDir, szValue);
+						LoadThisDll(szDllFilename);
+					}
+#else // REHLDS_FIXES
 					FS_GetLocalPath(szValue, szDllFilename, sizeof(szDllFilename));
 					Con_DPrintf("\nAdding:  %s/%s\n", szGameDir, szValue);
 					LoadThisDll(szDllFilename);
+#endif // REHLDS_FIXES
 				}
 				else
 				{
@@ -1014,7 +1027,14 @@ void LoadEntityDLLs(const char *szBaseDir)
 	{
 		pfnGetAPI = (APIFUNCTION)GetDispatch("GetEntityAPI");
 		if (!pfnGetAPI)
+		{
+#ifdef REHLDS_FIXES
+			if (g_iextdllMac == 0)
+				Host_Error("No game DLL loaded. Check \"gamedll_linux\"/\"gamedll\" in %s - listed file may be missing (metamod deleted?).", szDllListFile);
+			else
+#endif // REHLDS_FIXES
 			Host_Error("Couldn't get DLL API from %s!", szDllFilename);
+		}
 		interface_version = INTERFACE_VERSION;
 		if (!pfnGetAPI(&gEntityInterface, interface_version))
 		{
@@ -1049,6 +1069,14 @@ void LoadThisDll(const char *szDllFilename)
 #endif // _WIN32
 	PFN_GiveFnptrsToDll pfnGiveFnptrsToDll;
 	extensiondll_t *pextdll;
+
+#ifdef REHLDS_FIXES
+	if (!szDllFilename || szDllFilename[0] == '\0')
+	{
+		Con_Printf("LoadThisDll: empty DLL path (game DLL listed in liblist.gam not found on disk)\n");
+		return;
+	}
+#endif // REHLDS_FIXES
 
 #ifdef _WIN32
 	HMODULE hDLL = LoadWindowsDLL(szDllFilename);

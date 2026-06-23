@@ -110,6 +110,7 @@ protected:
 	IProxy *m_Proxy;
 	double m_flMasterUpdateTime;
 	bool m_bSteamInitialized;
+	bool m_bSteamInitFailed;
 };
 
 #define MASTER_INTERFACE_VERSION "master000"
