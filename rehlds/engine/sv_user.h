@@ -47,6 +47,26 @@ typedef struct sv_adjusted_positions_s
 	int deadflag;
 	vec3_t temp_org;
 	int temp_org_setflag;
+	// Lag compensation: backup/restore animation state used for studio hitboxes
+	int anim_saved;
+	int oldsequence;
+	float oldframe;
+	vec3_t oldangles;
+	byte oldblending[4];
+	byte oldcontroller[4];
+	int oldusehull;
+	vec3_t oldmins;
+	vec3_t oldmaxs;
+	int oldflags;
+	int newsequence;
+	float newframe;
+	vec3_t newangles;
+	byte newblending[4];
+	byte newcontroller[4];
+	int newusehull;
+	vec3_t newmins;
+	vec3_t newmaxs;
+	int newflags;
 } sv_adjusted_positions_t;
 
 typedef struct clc_func_s
