@@ -44,6 +44,8 @@
 		#include <linux/limits.h>
 	#endif
 	#include <sys/time.h>
+	#include <sys/syscall.h>
+	#include <time.h>
 #endif
 
 #include <stdio.h>
@@ -171,18 +173,21 @@ inline double CCounter::GetCurTime()
 
 #else // _WIN32
 
-	struct timeval tp;
-	static int secbase = 0;
+	// CLOCK_MONOTONIC is immune to NTP/wall-clock steps, unlike gettimeofday.
+	// Raw syscall instead of clock_gettime() keeps the binary free of the
+	// GLIBC_2.17 versioned symbol (repo enforces max GLIBC_2.11).
+	struct timespec ts;
+	static time_t secbase = 0;
 
-	gettimeofday(&tp, NULL);
+	syscall(SYS_clock_gettime, CLOCK_MONOTONIC, &ts);
 
 	if (!secbase)
 	{
-		secbase = tp.tv_sec;
-		return (tp.tv_usec / 1000000.0);
+		secbase = ts.tv_sec;
+		return (ts.tv_nsec / 1000000000.0);
 	}
 
-	return ((tp.tv_sec - secbase) + tp.tv_usec / 1000000.0);
+	return ((ts.tv_sec - secbase) + ts.tv_nsec / 1000000000.0);
 
 #endif // _WIN32
 }

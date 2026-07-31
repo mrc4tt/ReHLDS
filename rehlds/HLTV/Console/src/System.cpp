@@ -504,6 +504,8 @@ void System::RunFrame(double time)
 		if (m_LastTime > 0 && timeDiff <= 0) {
 			Printf("WARNING! System::RunFrame: system time difference <= 0.\n");
 			timeDiff = 0.001;
+			// resync so a single clock anomaly prints once instead of every iteration
+			m_LastTime = m_SystemTime - timeDiff;
 		}
 
 		if (m_MaxFPS > timeDiff) {
