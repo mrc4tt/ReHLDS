@@ -3999,6 +3999,8 @@ void SV_CheckTimeouts(void)
 	{
 		if (cl->fakeclient)
 			continue;
+		if (!cl->connected && !cl->active && !cl->spawned)
+			continue;
 #ifdef REHLDS_FIXES
 		// Force-drop a client that was inactivated on level change but never re-initiated its
 		// connection within sv_reconnect_timeout. This deadline is measured from the inactivation
@@ -4022,8 +4024,6 @@ void SV_CheckTimeouts(void)
 			}
 		}
 #endif // REHLDS_FIXES
-		if (!cl->connected && !cl->active && !cl->spawned)
-			continue;
 		if (cl->netchan.last_received < droptime)
 		{
 			SV_BroadcastPrintf("%s timed out\n", cl->name);
