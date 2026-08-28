@@ -224,7 +224,7 @@ bool CUserCmdTimeLimiter::CheckLimits(unsigned int clientId, usercmd_t *ucmd)
 	// check move command flood within a single server tick
 	if (sv_rehlds_movecmd_max_ticks.value > 0)
 	{
-		if (ust->ticksThisFrame > (unsigned int)sv_rehlds_movecmd_max_ticks.value) {
+		if (ust->ticksThisFrame >= (unsigned int)sv_rehlds_movecmd_max_ticks.value) {
 			return true;
 		}
 
