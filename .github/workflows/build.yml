@@ -27,6 +27,16 @@ jobs:
     steps:
       - name: Install dependencies
         run: |
+          # bullseye is EOL: main/updates moved to archive.debian.org, and
+          # bullseye-security was purged from deb.debian.org (404) but is not
+          # on archive.debian.org yet, so pin it to a snapshot.debian.org date.
+          rm -f /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list
+          cat > /etc/apt/sources.list <<'APT'
+          deb http://archive.debian.org/debian bullseye main
+          deb http://archive.debian.org/debian bullseye-updates main
+          deb http://snapshot.debian.org/archive/debian-security/20260830T000000Z bullseye-security main
+          APT
+          echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
           dpkg --add-architecture i386
           apt-get update
           apt-get install -y \
