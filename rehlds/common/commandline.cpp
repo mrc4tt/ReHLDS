@@ -200,6 +200,31 @@ void CCommandLine::RemoveParm(const char *pszParm)
 	if (!pszParm || *pszParm == '\0')
 		return;
 
+#ifdef LAUNCHER_FIXES
+	// Only remove whole parameters (at the start of the line or after a space), and stop at the
+	// next parameter: a word starting with '+', or with '-' and a letter (-port, -norestart...),
+	// so values like "aim_ak-colt", "-=007=-dao" or negative numbers are removed with it
+	int parmlen = Q_strlen(pszParm);
+	char *p = m_pszCmdLine;
+	while ((p = Q_strstr(p, pszParm)) != nullptr)
+	{
+		char *end = p + parmlen;
+		if ((p != m_pszCmdLine && p[-1] != ' ') || (*end && *end != ' '))
+		{
+			// Part of another word, skip it
+			p = end;
+			continue;
+		}
+
+		char *pnextparam = end;
+		while (*pnextparam && !(pnextparam[-1] == ' ' &&
+			(*pnextparam == '+' || (*pnextparam == '-' && isalpha((unsigned char)pnextparam[1])))))
+			pnextparam++;
+
+		// Chop out the current param and its values, regions overlap
+		Q_memmove(p, pnextparam, Q_strlen(pnextparam) + 1);
+	}
+#else // LAUNCHER_FIXES
 	// Search for first occurrence of pszParm
 	char *p, *found;
 	char *pnextparam;
@@ -235,6 +260,7 @@ void CCommandLine::RemoveParm(const char *pszParm)
 			Q_memset(found, 0, n);
 		}
 	}
+#endif // LAUNCHER_FIXES
 
 	// Strip and trailing ' ' characters left over.
 	while (1)

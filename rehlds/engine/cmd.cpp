@@ -293,6 +293,16 @@ void Cmd_StuffCmds_f(void)
 			Q_strcat(build, &com_argv[i][1]);
 			// Then add all following parameters till we meet argument with + or -, which means next command/cvar/parameter
 			i++;
+#ifdef REHLDS_FIXES
+			// The first argument may start with '-' if it isn't an option (-port, -norestart...),
+			// e.g. map names like "-=007=-dao" or negative numbers
+			if (com_argv[i] && com_argv[i][0] == '-' && com_argv[i][1] && !isalpha((unsigned char)com_argv[i][1]))
+			{
+				Q_strcat(build, " ");
+				Q_strcat(build, com_argv[i]);
+				i++;
+			}
+#endif
 			while (com_argv[i] && com_argv[i][0] != '+' && com_argv[i][0] != '-')
 			{
 				Q_strcat(build, " ");
