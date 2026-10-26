@@ -925,6 +925,10 @@ IRehldsHookRegistry_SV_SendResources* CRehldsHookchains::SV_SendResources() {
 	return &m_SV_SendResources;
 }
 
+IRehldsHookRegistry_SV_StudioSetupBones* CRehldsHookchains::SV_StudioSetupBones() {
+	return &m_SV_StudioSetupBones;
+}
+
 IRehldsHookRegistry_SV_TestEntityPosition* CRehldsHookchains::SV_TestEntityPosition() {
 	return &m_SV_TestEntityPosition;
 }
@@ -959,6 +963,10 @@ IRehldsServerData* EXT_FUNC CRehldsApi::GetServerData() {
 
 IMessageManager* EXT_FUNC CRehldsApi::GetMessageManager() {
 	return &MessageManager();
+}
+
+IRehldsStudio* EXT_FUNC CRehldsApi::GetStudio() {
+	return &g_RehldsStudio;
 }
 
 IRehldsFlightRecorder* EXT_FUNC CRehldsApi::GetFlightRecorder() {
