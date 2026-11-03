@@ -131,6 +131,7 @@ set(ENGINE_SRCS
 	engine/sys_linuxwind.cpp
 	engine/SystemWrapper.cpp
 	engine/host.cpp
+	engine/host_perf.cpp
 	engine/host_cmd.cpp
 	engine/net_chan.cpp
 	engine/net_ws.cpp

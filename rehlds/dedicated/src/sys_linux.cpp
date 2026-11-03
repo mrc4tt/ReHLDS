@@ -59,6 +59,7 @@ char g_szEXEName[MAX_PATH];
 
 SleepType Sys_Sleep;
 NET_Sleep_t NET_Sleep_Timeout = nullptr;
+NET_Sleep_t Host_WaitForNextFrame = nullptr;
 
 CSys::CSys()
 {
@@ -153,6 +154,18 @@ void Sleep_BusyWait(int msec)
 	}
 }
 
+// pingboost 5 (preferred): precise frame scheduler driven by the engine.
+//
+// The engine owns the frame deadline (fixed grid at sys_ticrate), so instead
+// of sleeping a whole millisecond we sleep exactly until the next frame is due
+// (hrtimer nanosleep with 1ns timer slack), then spin only the last few tens
+// of microseconds. Hits sys_ticrate evenly (e.g. 1000/1250) at a fraction of
+// the CPU of a pure busy-wait. Tune with the sys_precise_spin cvar.
+void Sleep_Precise(int msec)
+{
+	Host_WaitForNextFrame();
+}
+
 // linux runs on a 100Hz scheduling clock, so the minimum latency from
 // usleep is 10msec. However, people want lower latency than this..
 //
@@ -228,7 +241,15 @@ void Sys_InitPingboost()
 			Sys_Sleep = Sleep_NanoSleep;
 			break;
 		case 5:
-			Sys_Sleep = Sleep_BusyWait;
+			// engine_i486.so is already loaded at this point (see sys_ded.cpp)
+			Host_WaitForNextFrame = (NET_Sleep_t)Sys_GetProcAddress(g_pEngineModule, "Host_WaitForNextFrame");
+			if (Host_WaitForNextFrame) {
+				Sys_Sleep = Sleep_Precise;
+			}
+			else {
+				// older engine without the precise scheduler export
+				Sys_Sleep = Sleep_BusyWait;
+			}
 			break;
 		// just in case
 		default:
