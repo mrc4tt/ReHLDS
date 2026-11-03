@@ -80,6 +80,9 @@
     <ClCompile Include="..\engine\host.cpp">
       <Filter>engine\common</Filter>
     </ClCompile>
+    <ClCompile Include="..\engine\host_perf.cpp">
+      <Filter>engine\common</Filter>
+    </ClCompile>
     <ClCompile Include="..\engine\module.cpp">
       <Filter>engine\common</Filter>
     </ClCompile>
@@ -527,6 +530,9 @@
       <Filter>engine\common</Filter>
     </ClInclude>
     <ClInclude Include="..\engine\host.h">
+      <Filter>engine\common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\engine\host_perf.h">
       <Filter>engine\common</Filter>
     </ClInclude>
     <ClInclude Include="..\common\vmodes.h">
