@@ -32,6 +32,7 @@
 
 #include "archtypes.h"
 #include "rehlds_api.h"
+#include "rehlds_fork_api.h"
 #include "rehlds_interfaces_impl.h"
 
 //Steam_NotifyClientConnect
@@ -393,6 +394,13 @@ extern RehldsFuncs_t g_RehldsApiFuncs;
 extern CRehldsServerStatic g_RehldsServerStatic;
 extern CRehldsServerData g_RehldsServerData;
 
+
+class CRehldsForkApi : public IRehldsForkApi {
+public:
+	virtual int GetMajorVersion();
+	virtual int GetMinorVersion();
+	virtual IRehldsHookRegistry_SV_TestEntityPosition *SV_TestEntityPosition();
+};
 
 class CRehldsApi : public IRehldsApi {
 public:
