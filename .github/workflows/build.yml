@@ -1,17 +1,9 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 name: C/C++ CI
 
+# Manual only: releases are built and published on the RE server
+# (support/local-release.sh via server-ops / ops.miksen.me -> Releases).
 on:
-  push:
-    branches: [ master ]
-    tags: [ 'v*' ]
-    paths-ignore:
-      - '**.md'
-      - '.github/**'
-  pull_request:
-    types: [ opened, reopened, synchronize ]
-  release:
-    types: [ published ]
   workflow_dispatch:
 
 # required for publishing releases and uploading artifacts

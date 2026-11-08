@@ -24,4 +24,7 @@ actionlinit
 
 rehlds/version/appversion.h
 *.sh
+!docker-build.sh
+!docker/build.sh
+!support/*.sh
 hm

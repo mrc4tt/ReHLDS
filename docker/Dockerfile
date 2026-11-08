@@ -7,7 +7,15 @@ FROM debian:11-slim
 
 # 32-bit multilib toolchain — the engine compiles as i386 (-m32).
 # Package list is kept identical to the CI "Install dependencies" step.
-RUN dpkg --add-architecture i386 \
+# bullseye is EOL: same apt sources as the CI "Install dependencies" step.
+RUN rm -f /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list \
+ && printf '%s\n' \
+      'deb http://archive.debian.org/debian bullseye main' \
+      'deb http://archive.debian.org/debian bullseye-updates main' \
+      'deb http://snapshot.debian.org/archive/debian-security/20260830T000000Z bullseye-security main' \
+      > /etc/apt/sources.list \
+ && echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until \
+ && dpkg --add-architecture i386 \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
       gcc-multilib g++-multilib \
