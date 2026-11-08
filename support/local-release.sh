@@ -73,12 +73,21 @@ else NEW=$(next "${BUMP:-patch}"); fi
 TAG="v$NEW"
 tag_exists "$NEW" && die "tag $TAG already exists"
 
+# --- optional signing, configured on the release machine only -----------------------
+# ${LOCAL_RELEASE_SIGNING:-$HOME/.config/local-release/signing.env}, shell syntax:
+#   GPG_KEY=<fingerprint>        detach-sign the zip; zip.asc and the public key are uploaded
+#   (Linux only: no PFX signing)
+GPG_KEY="" PFX_FILE="" PFX_PASS_FILE="" PFX_TIMESTAMP=http://timestamp.digicert.com
+SIGN_ENV=${LOCAL_RELEASE_SIGNING:-$HOME/.config/local-release/signing.env}
+if [[ -r "$SIGN_ENV" ]]; then . "$SIGN_ENV"; fi
+
 # --- preflight ---------------------------------------------------------------------
 [[ "$(git branch --show-current)" == "$BRANCH" ]] || die "not on $BRANCH"
 [[ -z "$(git status --porcelain --untracked-files=no)" ]] || die "working tree has changes"
 git fetch -q "$REMOTE" "$BRANCH" --tags
 [[ "$(git rev-parse HEAD)" == "$(git rev-parse "$REMOTE/$BRANCH")" ]] || die "$BRANCH is not $REMOTE/$BRANCH"
 command -v docker >/dev/null || die "docker missing"
+[[ -z "$GPG_KEY" ]] || gpg --batch --list-secret-keys "$GPG_KEY" >/dev/null 2>&1 || die "GPG_KEY $GPG_KEY: no secret key"
 (( DRY )) || gh auth status >/dev/null 2>&1 || die "gh is not logged in"
 SLUG=$(git remote get-url "$REMOTE" | sed -E 's#^(git@github\.com:|https://github\.com/)##; s#\.git$##')
 
@@ -115,9 +124,17 @@ APP_VERSION=$(sed -n 's/^#define APP_VERSION_STRD[[:space:]]*"\([^"]*\)".*/\1/p'
 BUILT=$( (( DRY )) && echo "$FILE_VER" || echo "$NEW")   # a dry run builds without the bump
 [[ "$APP_VERSION" == "$BUILT".* ]] || die "appversion.h says '$APP_VERSION', expected $BUILT.*"
 ZIP="$ROOT/publish/rehlds-bin-$APP_VERSION.zip"
-rm -f publish/*.zip
+rm -f publish/*.zip publish/*.asc
 (cd publish && zip -qr "$ZIP" bin hlsdk)
 echo "== packaged $(basename "$ZIP") ($(du -h "$ZIP" | cut -f1))"
+ASSETS=("$ZIP")
+if [[ -n "$GPG_KEY" ]]; then
+	gpg --batch --yes --local-user "$GPG_KEY" --detach-sign --armor -o "$ZIP.asc" "$ZIP"
+	gpg --batch --verify "$ZIP.asc" "$ZIP" 2>/dev/null || die "signature of $(basename "$ZIP") does not verify"
+	gpg --batch --yes --armor --export "$GPG_KEY" > "$ROOT/publish/signing-key.asc"
+	ASSETS+=("$ZIP.asc" "$ROOT/publish/signing-key.asc")
+	echo "== signed $(basename "$ZIP") with $GPG_KEY"
+fi
 
 if (( DRY )); then
 	echo "== dry run: would tag $TAG, push $BRANCH + $TAG to $REMOTE and release $SLUG $TAG"
@@ -132,11 +149,15 @@ NOTES=$(mktemp)
 	git log --no-merges --format='- %s (%h)' "${LAST_TAG:+$LAST_TAG..}HEAD" | grep -v '^- bump [0-9]' || echo "- no changes"
 	echo
 	echo "Engine CRC32: \`$(cut -d' ' -f1 publish/bin/linux32/engine_i486.so.crc)\`"
+	if [[ -n "$GPG_KEY" ]]; then
+		echo
+		echo "Signed with GPG key \`$GPG_KEY\` (\`signing-key.asc\`): \`gpg --import signing-key.asc && gpg --verify $(basename "$ZIP").asc\`"
+	fi
 } > "$NOTES"
 
 git tag -a "$TAG" -m "ReHLDS $NEW"
 git push -q "$REMOTE" "$BRANCH"
 ARMED=0                       # master is pushed: no undo from here on
 git push -q "$REMOTE" "$TAG"
-gh release create "$TAG" "$ZIP" -R "$SLUG" --title "$TAG" --notes-file "$NOTES" --latest
+gh release create "$TAG" "${ASSETS[@]}" -R "$SLUG" --title "$TAG" --notes-file "$NOTES" --latest
 echo "== released https://github.com/$SLUG/releases/tag/$TAG"
