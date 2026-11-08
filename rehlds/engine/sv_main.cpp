@@ -6785,6 +6785,27 @@ void FilterToString(const ipfilter_t &f, char *s)
 		Q_sprintf(s, "%i.%i.%i.%i/%i", b[0], b[1], b[2], b[3], f.cidr);
 }
 
+#ifdef REHLDS_FIXES
+static void SV_NotifyIPBanAdded(const ipfilter_t &f, float banTime)
+{
+	// stay consistent with banid: only report when sv_logbans is enabled
+	if (sv_logbans.value == 0.0f)
+		return;
+
+	char strFilter[32];
+	char reason[32];
+
+	FilterToString(f, strFilter);
+
+	if (banTime == 0.0f)
+		Q_strcpy(reason, "permanently");
+	else
+		Q_snprintf(reason, sizeof(reason), "for %g minutes", banTime);
+
+	Con_Printf("Ban: \"%s\" was added to the IP ban list %s\n", strFilter, reason);
+}
+#endif // REHLDS_FIXES
+
 bool IsFilterIncludesAnotherFilter(const ipfilter_t &f, const ipfilter_t &f2)
 {
 	return f2.mask >= f.mask
@@ -7540,6 +7561,7 @@ void SV_AddIP_f(void)
 			ipfilters[i].banEndTime = (banTime == 0.0f) ? 0.0f : banTime * 60.0f + realtime;
 #ifdef REHLDS_FIXES
 			ipfilters[i].cidr = tempFilter.cidr;
+			SV_NotifyIPBanAdded(ipfilters[i], banTime);
 #endif // REHLDS_FIXES
 			return;
 		}
@@ -7561,14 +7583,14 @@ void SV_AddIP_f(void)
 	ipfilters[i].mask = tempFilter.mask;
 #ifdef REHLDS_FIXES
 	ipfilters[i].cidr = tempFilter.cidr;
-#endif // REHLDS_FIXES
 
-#ifdef REHLDS_FIXES
 	char reason[32];
 	if (banTime == 0.0f)
 		Q_strcpy(reason, "permanently");
 	else
 		Q_sprintf(reason, "for %g minutes", banTime);
+
+	SV_NotifyIPBanAdded(ipfilters[i], banTime);
 #endif // REHLDS_FIXES
 
 	for (int i = 0; i < g_psvs.maxclients; i++)
@@ -8281,18 +8303,28 @@ void EXT_FUNC SV_Frame_Internal()
 	gGlobalVariables.frametime = host_frametime;
 	g_psv.oldtime = g_psv.time;
 	SV_CheckCmdTimes();
-	SV_ReadPackets();
+	{
+		HOSTPERF_SCOPE(HPS_NET_READ);
+		SV_ReadPackets();
+	}
 	if (SV_IsSimulating())
 	{
+		HOSTPERF_SCOPE(HPS_PHYSICS);
 		SV_Physics();
 		g_psv.time += host_frametime;
 	}
 	SV_RequestMissingResourcesFromClients();
 	SV_CheckTimeouts();
-	SV_SendClientMessages();
+	{
+		HOSTPERF_SCOPE(HPS_NET_SEND);
+		SV_SendClientMessages();
+	}
 	SV_CheckMapDifferences();
 	SV_GatherStatistics();
-	Steam_RunFrame();
+	{
+		HOSTPERF_SCOPE(HPS_STEAM);
+		Steam_RunFrame();
+	}
 }
 
 void SV_Drop_f(void)

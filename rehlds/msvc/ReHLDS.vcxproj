@@ -46,6 +46,7 @@
     <ClCompile Include="..\engine\filesystem_internal.cpp" />
     <ClCompile Include="..\engine\hashpak.cpp" />
     <ClCompile Include="..\engine\host.cpp" />
+    <ClCompile Include="..\engine\host_perf.cpp" />
     <ClCompile Include="..\engine\host_cmd.cpp" />
     <ClCompile Include="..\engine\info.cpp" />
     <ClCompile Include="..\engine\ipratelimit.cpp" />
@@ -325,6 +326,7 @@
     <ClInclude Include="..\engine\filter.h" />
     <ClInclude Include="..\engine\hashpak.h" />
     <ClInclude Include="..\engine\host.h" />
+    <ClInclude Include="..\engine\host_perf.h" />
     <ClInclude Include="..\engine\host_cmd.h" />
     <ClInclude Include="..\engine\igame.h" />
     <ClInclude Include="..\engine\info.h" />

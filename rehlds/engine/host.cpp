@@ -145,6 +145,7 @@ void NORETURN Host_Error(const char *error, ...)
 void Host_InitLocal(void)
 {
 	Host_InitCommands();
+	HostPerf_Init();
 	Cvar_RegisterVariable(&host_killtime);
 	Cvar_RegisterVariable(&sys_ticrate);
 	Cvar_RegisterVariable(&sys_timescale);
@@ -688,7 +689,13 @@ qboolean Host_FilterTime(float time)
 
 		if (fps > 0.0f)
 		{
-			if (1.0f / (fps + 1.0f) > realtime - oldrealtime)
+			if (g_bPreciseFrameTiming)
+			{
+				// -pingboost 5: drift-free fixed grid at exactly sys_ticrate
+				if (!HostPerf_PreciseGate(fps))
+					return FALSE;
+			}
+			else if (1.0f / (fps + 1.0f) > realtime - oldrealtime)
 				return FALSE;
 		}
 	}
@@ -872,6 +879,8 @@ void _Host_Frame(float time)
 	if (!Host_FilterTime(time))
 		return;
 
+	HostPerf_FrameBegin();
+
 #ifdef REHLDS_FLIGHT_REC
 	static long frameCounter = 0;
 	if (rehlds_flrec_frame.string[0] != '0') {
@@ -887,7 +896,10 @@ void _Host_Frame(float time)
 	Host_ComputeFPS(host_frametime);
 	R_SetStackBase();
 	CL_CheckClientState();
-	Cbuf_Execute();
+	{
+		HOSTPERF_SCOPE(HPS_CMDBUF);
+		Cbuf_Execute();
+	}
 	ClientDLL_UpdateClientData();
 
 	if (g_psv.active)
@@ -939,6 +951,8 @@ void _Host_Frame(float time)
 
 	//Rehlds Security
 	Rehlds_Security_Frame();
+
+	HostPerf_FrameEnd();
 
 #ifdef REHLDS_FLIGHT_REC
 	if (rehlds_flrec_frame.string[0] != '0') {
