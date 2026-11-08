@@ -58,6 +58,7 @@ while (( $# )); do
 		--bump)    [[ "${2:-}" =~ ^(patch|minor|major)$ ]] || die "bad --bump"; BUMP=$2; shift ;;
 		--version) [[ "${2:-}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "bad --version (X.Y.Z)"; WANT=${2#v}; shift ;;
 		--dry-run) DRY=1 ;;
+		--no-windows) ;;              # Linux only anyway; accepted for server-ops
 		-h|--help) sed -n '2,16p' "$0"; exit 0 ;;
 		*) die "unknown option: $1" ;;
 	esac
