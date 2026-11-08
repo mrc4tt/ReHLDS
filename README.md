@@ -76,6 +76,9 @@ This means that plugins that do binary code analysis (Orpheu for example) probab
 <li>sv_rehlds_stringcmdrate_avg_punish // Time in minutes for which the player will be banned (0 - Permanent, use a negative number for a kick). Default: 5
 <li>sv_rehlds_stringcmdrate_max_burst // Max burst level of 'string' cmds for ban. Default: 400
 <li>sv_rehlds_stringcmdrate_burst_punish // Time in minutes for which the player will be banned (0 - Permanent, use a negative number for a kick). Default: 5
+<li>sv_rehlds_dlfile_bucket_size // Max size of the dlfile token bucket. 0 - automatic (map resource list size + 16), a negative number disables dlfile rate limiting. Default: 0
+<li>sv_rehlds_dlfile_refillrate // How many dlfile tokens are restored per second. Default: 50
+<li>sv_rehlds_dlfile_punish // Time in minutes for which the player will be banned for dlfile flooding (0 - Permanent, use a negative number for a kick). Default: -1 (kick)
 <li>sv_rehlds_userinfo_transmitted_fields // Userinfo fields only with these keys will be transmitted to clients via network. If not set then all fields will be transmitted (except prefixed with underscore). Each key must be prefixed by backslash, for example "\name\model\*sid\*hltv\bottomcolor\topcolor". See [wiki](https://github.com/rehlds/ReHLDS/wiki/Userinfo-keys) to collect sufficient set of keys for your server. Default: ""
 <li>sv_rehlds_attachedentities_playeranimationspeed_fix // Fixes bug with gait animation speed increase when player has some attached entities (aiments). Can cause animation lags when cl_updaterate is low. Default: 0
 <li>sys_precise_spin &lt;-1|0|N&gt; // -pingboost 5 only. Microseconds to spin before each frame deadline after sleeping. -1 = adaptive (tracks kernel oversleep), 0 = pure sleep (lowest CPU, slightly more jitter), N = fixed margin (max 1000). Default: -1
@@ -104,6 +107,7 @@ This means that plugins that do binary code analysis (Orpheu for example) probab
 <li>sv_rehlds_movecmdtime_min_scale // Defines the min client's base game speed ratio. Clients slowing the game down below this multiplier will receive warnings. Default: 0.5
 <li>sv_rehlds_movecmdtime_max_warnings // Maximum allowed speedhack/slowmo warnings before the punishment is applied. -1 - disable detection. Default: -1
 <li>sv_rehlds_movecmdtime_punish // Time in minutes for which the player will be banned for speedhacking/slowing (-1 - Kick, 0 - Permanent, use a negative number for a kick). Default: -1
+<li>sv_reconnect_timeout // Hard deadline in seconds for a client to re-initiate its connection after a level change, independent of netchan activity. Closes a phantom-slot exploit where a cheat blocks the "reconnect" command and keeps the netchan warm so sv_timeout never fires. Only covers the time until the client answers "reconnect" (sends "new" or "connect"); map loading, downloads and spawn are not counted. HLTV proxies, which answer about 30 seconds after a level change, get three times this value (at least 90). 0 - disabled. Default: 30
 </ul>
 </details>
 

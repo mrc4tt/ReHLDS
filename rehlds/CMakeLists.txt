@@ -184,6 +184,7 @@ set(ENGINE_SRCS
 	rehlds/rehlds_api_impl.cpp
 	rehlds/rehlds_interfaces_impl.cpp
 	rehlds/rehlds_messagemngr_impl.cpp
+	rehlds/rehlds_studio_impl.cpp
 	rehlds/rehlds_security.cpp
 )
 
@@ -194,6 +195,7 @@ set(UNITTESTS_SRCS
 	unittests/download_tests.cpp
 	unittests/info_tests.cpp
 	unittests/mathlib_tests.cpp
+	unittests/messagemngr_tests.cpp
 	unittests/rehlds_tests_shared.cpp
 	unittests/rehlds_tests_shared.h
 	unittests/security_tests.cpp
