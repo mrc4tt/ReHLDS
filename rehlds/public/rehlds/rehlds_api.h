@@ -269,7 +269,8 @@ typedef IVoidHookChainRegistry<sizebuf_t *> IRehldsHookRegistry_SV_SendResources
 //for traces, bone positions and attachments; after the original the bones are in IRehldsStudio::GetBoneTransform
 typedef IVoidHookChain<model_t *, float, int, const vec_t *, const vec_t *, const unsigned char *, const unsigned char *, int, const edict_t *> IRehldsHook_SV_StudioSetupBones;
 typedef IVoidHookChainRegistry<model_t *, float, int, const vec_t *, const vec_t *, const unsigned char *, const unsigned char *, int, const edict_t *> IRehldsHookRegistry_SV_StudioSetupBones;
-//SV_TestEntityPosition hook
+//SV_TestEntityPosition hook (fork only). Deprecated here: use IRehldsForkApi (rehlds_fork_api.h),
+//this entry is only kept for modules built against it and moves whenever upstream adds a hook.
 typedef IHookChain<edict_t*, edict_t*> IRehldsHook_SV_TestEntityPosition;
 typedef IHookChainRegistry<edict_t*, edict_t*> IRehldsHookRegistry_SV_TestEntityPosition;
 

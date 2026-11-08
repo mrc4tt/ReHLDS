@@ -411,6 +411,7 @@
     <ClInclude Include="..\public\rehlds\progdefs.h" />
     <ClInclude Include="..\public\rehlds\progs.h" />
     <ClInclude Include="..\public\rehlds\rehlds_api.h" />
+    <ClInclude Include="..\public\rehlds\rehlds_fork_api.h" />
     <ClInclude Include="..\public\rehlds\rehlds_studio.h" />
     <ClInclude Include="..\public\rehlds\rehlds_interfaces.h" />
     <ClInclude Include="..\public\rehlds\Sequence.h" />

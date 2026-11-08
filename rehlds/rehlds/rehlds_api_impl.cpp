@@ -1000,3 +1000,17 @@ IRehldsFlightRecorder* EXT_FUNC CRehldsApi::GetFlightRecorder() {
 }
 
 EXPOSE_SINGLE_INTERFACE(CRehldsApi, IRehldsApi, VREHLDS_HLDS_API_VERSION);
+
+int EXT_FUNC CRehldsForkApi::GetMajorVersion() {
+	return REHLDS_FORK_API_VERSION_MAJOR;
+}
+
+int EXT_FUNC CRehldsForkApi::GetMinorVersion() {
+	return REHLDS_FORK_API_VERSION_MINOR;
+}
+
+IRehldsHookRegistry_SV_TestEntityPosition* EXT_FUNC CRehldsForkApi::SV_TestEntityPosition() {
+	return &g_RehldsHookchains.m_SV_TestEntityPosition;
+}
+
+EXPOSE_SINGLE_INTERFACE(CRehldsForkApi, IRehldsForkApi, VREHLDS_FORK_API_VERSION);
