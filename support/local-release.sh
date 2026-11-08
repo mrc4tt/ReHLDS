@@ -114,11 +114,27 @@ if [[ "$NEW" != "$FILE_VER" ]] && (( ! DRY )); then
 	git commit -q -m "bump $NEW"
 fi
 
+# Build output (cmake/make, every compiler call) goes to a log per step; only the summary
+# lines are shown, and the end of the log when a step fails.
+LOGDIR="${XDG_CACHE_HOME:-$HOME/.cache}/local-release/$NAME"
+SUMMARY='^==> |^== |Tests executed|test failures|Unittests|^\[(OK|SKIP|FAIL)\]|Assertion failed|CRC32|compiler warnings hidden'
+step() { # step <log name> <command...>
+	local name=$1 log="$LOGDIR/build-$1.log"; shift
+	mkdir -p "$LOGDIR"
+	if "$@" > "$log" 2>&1; then
+		grep -E "$SUMMARY" "$log" | sed 's/^/   /' || true
+	else
+		echo "== $name FAILED, end of $log:" >&2
+		tail -40 "$log" >&2
+		die "$name failed (full log: $log)"
+	fi
+}
+
 # --- build (appversion.h = version.h + commit count, so after the bump commit) -------
 echo "== docker image $IMAGE"
 docker build -q -t "$IMAGE" -f docker/Dockerfile docker >/dev/null
 echo "== build (unittests, release, package, glibc check)"
-docker run --rm -v "$ROOT:/src" -w /src -u "$(id -u):$(id -g)" -e HOME=/tmp "$IMAGE" all
+step linux docker run --rm -v "$ROOT:/src" -w /src -u "$(id -u):$(id -g)" -e HOME=/tmp "$IMAGE" all
 
 APP_VERSION=$(sed -n 's/^#define APP_VERSION_STRD[[:space:]]*"\([^"]*\)".*/\1/p' publish/appversion.h)
 BUILT=$( (( DRY )) && echo "$FILE_VER" || echo "$NEW")   # a dry run builds without the bump
