@@ -119,26 +119,16 @@ const char *CTextConsoleWin32::GetLine()
 		unsigned long numread;
 		unsigned long numevents;
 
+		// No console to read from (started in the background, or under Wine): nothing typed,
+		// not a fatal error. Valve's hlds does the same; the error box stopped the server
 		if (!GetNumberOfConsoleInputEvents(hinput, &numevents))
-		{
-			if (m_System) {
-				m_System->Errorf("CTextConsoleWin32::GetLine: !GetNumberOfConsoleInputEvents\n");
-			}
-
 			return nullptr;
-		}
 
 		if (numevents <= 0)
 			break;
 
 		if (!ReadConsoleInput(hinput, recs, ARRAYSIZE(recs), &numread))
-		{
-			if (m_System) {
-				m_System->Errorf("CTextConsoleWin32::GetLine: !ReadConsoleInput\n");
-			}
-
 			return nullptr;
-		}
 
 		if (numread == 0)
 			return nullptr;
