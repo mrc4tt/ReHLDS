@@ -268,6 +268,10 @@ cvar_t sv_usercmd_custom_random_seed = { "sv_usercmd_custom_random_seed", "0", 0
 cvar_t sv_rehlds_allow_large_sprays = { "sv_rehlds_allow_large_sprays", "1", 0, 1.0f, nullptr };
 #endif
 
+// RCON password shown as *** in the console and the logs ("Rcon from" / "Bad Rcon" lines);
+// 0 shows the line as sent. Registered in every build (also without REHLDS_FIXES)
+cvar_t sv_rcon_mask_password = { "sv_rcon_mask_password", "1", 0, 1.0f, nullptr };
+
 delta_t *SV_LookupDelta(char *name)
 {
 	delta_info_t *p = g_sv_delta;
@@ -3655,6 +3659,35 @@ int SV_Rcon_Validate(void)
 
 // A client issued an rcom command
 // Shift down the remaining args and redirect all Con_Printf
+// "rcon <challenge> <password> <command>" as shown in the logs: the password (quoted or not)
+// becomes ***, the challenge and the command stay for auditing
+void SV_RconMaskPassword(const char *in, char *out, int size)
+{
+	int o = 0;
+	const char *p = in;
+	auto put = [&](char c) { if (o < size - 1) out[o++] = c; };
+	for (int word = 0; word < 2; word++) // "rcon" and the challenge
+	{
+		while (*p == ' ' || *p == '\t') put(*p++);
+		while (*p && *p != ' ' && *p != '\t') put(*p++);
+	}
+	while (*p == ' ' || *p == '\t') put(*p++);
+	if (*p == '"')
+	{
+		p++;
+		while (*p && *p != '"') p++;
+		if (*p == '"') p++;
+		put('"'); put('*'); put('*'); put('*'); put('"');
+	}
+	else if (*p)
+	{
+		while (*p && *p != ' ' && *p != '\t') p++;
+		put('*'); put('*'); put('*');
+	}
+	while (*p) put(*p++); // the command, as sent
+	out[o] = 0;
+}
+
 void SV_Rcon(netadr_t *net_from_)
 {
 	int		invalid;
@@ -3676,15 +3709,22 @@ void SV_Rcon(netadr_t *net_from_)
 	if (sv_rcon_condebug.value > 0.0f)
 #endif
 	{
+		// only what is printed changes; rcon_buff is still what gets parsed and run below
+		char shown[sizeof(rcon_buff)];
+		if (sv_rcon_mask_password.value > 0.0f)
+			SV_RconMaskPassword(rcon_buff, shown, sizeof(shown));
+		else
+			Q_strlcpy(shown, rcon_buff);
+
 		if (invalid != RCON_RESULT_SUCCESS)
 		{
-			Con_Printf("Bad Rcon from %s:\n%s\n", NET_AdrToString(*net_from_), rcon_buff);
-			Log_Printf("Bad Rcon: \"%s\" from \"%s\"\n", rcon_buff, NET_AdrToString(*net_from_));
+			Con_Printf("Bad Rcon from %s:\n%s\n", NET_AdrToString(*net_from_), shown);
+			Log_Printf("Bad Rcon: \"%s\" from \"%s\"\n", shown, NET_AdrToString(*net_from_));
 		}
 		else
 		{
-			Con_Printf("Rcon from %s:\n%s\n", NET_AdrToString(*net_from_), rcon_buff);
-			Log_Printf("Rcon: \"%s\" from \"%s\"\n", rcon_buff, NET_AdrToString(*net_from_));
+			Con_Printf("Rcon from %s:\n%s\n", NET_AdrToString(*net_from_), shown);
+			Log_Printf("Rcon: \"%s\" from \"%s\"\n", shown, NET_AdrToString(*net_from_));
 		}
 	}
 
@@ -8486,6 +8526,7 @@ void SV_InitEncoders(void)
 
 void SV_Init(void)
 {
+	Cvar_RegisterVariable(&sv_rcon_mask_password);
 	Cmd_AddCommand("banid", SV_BanId_f);
 	Cmd_AddCommand("removeid", SV_RemoveId_f);
 	Cmd_AddCommand("listid", SV_ListId_f);

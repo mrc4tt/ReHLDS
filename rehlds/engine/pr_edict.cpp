@@ -319,6 +319,35 @@ char *ED_ParseEdict(char *data, edict_t *ent)
 			gEntityInterface.pfnKeyValue(ent, &kvd);
 		}
 	}
+	else
+	{
+		// No classname (the HL25 update pads stock maps such as de_survivor, cs_siege and cs_747
+		// with a "file_padding" entity): read its keys up to the closing brace and don't spawn it,
+		// as Valve's current engine does. Left unread, ED_LoadFromFile found a key where it
+		// expects { and the map failed to load
+		while (true)
+		{
+			data = COM_Parse(data);
+			if (!data)
+			{
+				Host_Error("%s: EOF without closing brace", __func__);
+			}
+			if (com_token[0] == '}')
+			{
+				break;
+			}
+
+			data = COM_Parse(data);
+			if (!data)
+			{
+				Host_Error("%s: EOF without closing brace", __func__);
+			}
+			if (com_token[0] == '}')
+			{
+				Host_Error("%s: closing brace without data", __func__);
+			}
+		}
+	}
 
 	if (!init)
 	{

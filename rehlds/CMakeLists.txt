@@ -194,6 +194,7 @@ set(UNITTESTS_SRCS
 	unittests/delta_tests.cpp
 	unittests/download_tests.cpp
 	unittests/info_tests.cpp
+	unittests/rcon_tests.cpp
 	unittests/mathlib_tests.cpp
 	unittests/messagemngr_tests.cpp
 	unittests/rehlds_tests_shared.cpp
