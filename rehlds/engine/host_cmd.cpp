@@ -599,6 +599,15 @@ void Host_Status_f(void)
 	if (!noip)
 	{
 		Host_Status_Printf(conprint, log, "tcp/ip  :  %s\n", NET_AdrToString(net_local_adr));
+
+		// the address Steam sees this server at, the one players outside its network join
+		ISteamGameServer *pSteamServer = bConnectedToSteam3 ? CRehldsPlatformHolder::get()->SteamGameServer() : NULL;
+		uint32 publicIP = pSteamServer ? pSteamServer->GetPublicIP() : 0;
+		if (publicIP)
+		{
+			Host_Status_Printf(conprint, log, "public  :  %u.%u.%u.%u:%d\n", (publicIP >> 24) & 0xFF, (publicIP >> 16) & 0xFF,
+				(publicIP >> 8) & 0xFF, publicIP & 0xFF, ntohs(net_local_adr.port));
+		}
 	}
 #ifdef _WIN32
 	if (!noipx)
